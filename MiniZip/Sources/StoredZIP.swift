@@ -4,7 +4,7 @@ import Foundation
 func writeZIP(input: URL, output: URL) throws {
     let bytes = try Data(contentsOf: input)
     let name = Data(input.lastPathComponent.utf8)
-    let comment = Data(RegressionSample.envelope.utf8)
+    let comment = Data()
     guard name.count <= 65_535, comment.count <= 65_535,
           UInt64(bytes.count) + UInt64(name.count) * 2 + UInt64(comment.count) + 98 <= UInt64(UInt32.max) else {
         throw NSError(domain: "MiniZip", code: 1, userInfo: [NSLocalizedDescriptionKey: "This file needs ZIP64, which MiniZip does not support."])

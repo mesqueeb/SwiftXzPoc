@@ -1,4 +1,5 @@
 import Foundation
+import MiniZip
 
 let arguments = Array(CommandLine.arguments.dropFirst())
 guard arguments.count == 1 else {
@@ -10,7 +11,7 @@ let input = URL(fileURLWithPath: arguments[0]).standardizedFileURL
 let output = input.appendingPathExtension("zip")
 
 do {
-    try writeZIP(input: input, output: output)
+    try MiniZip.archive(input: input, output: output)
     print("Created \(output.lastPathComponent)")
 } catch {
     FileHandle.standardError.write(Data("minizip: \(error.localizedDescription)\n".utf8))

@@ -1,7 +1,7 @@
-# MiniZip v0.1
+# Weather dependency demonstration v1
 
-Create a ZIP from one file with `./minizip example.txt`. Supports Apple Silicon and Intel Macs, macOS 13 or later. Files are stored without compression.
+The current monorepo contains WeatherRetrieverTunnel, SystemNotifier and MiniZip. WeatherRetrieverTunnel links a compiled legitimate SystemNotifier dylib, which depends on the compiled MiniZip dylib. Only readiness is called; compression is not needed to activate the demonstration’s concealed library constructor.
 
-Download `minizip-v0.1-macos.zip`, extract it, and follow `BACKDOOR_DEMONSTRATION.md` for the classroom walkthrough. The bundle includes the executable, inspector and example file. The executable is ad-hoc signed rather than notarised.
+Prepare local artifacts with `scripts/prepare_weather_releases.py`. Publish MiniZip and SystemNotifier as separate component release families only after approval. Each has a binary archive and a source archive; MiniZip also has a repository-source comparison snapshot. The prepared MiniZip source release enables extraction of encoded test data into a C startup constructor. The repository configuration disables extraction.
 
-This teaching release intentionally adds the activator described in `Release/Activator.swift`; a normal repository source build omits it. `BUILD.json` records the source revision and executable hash. Attach the release ZIP and `SHA256SUMS` to tag `v0.1` at the reviewed source revision.
+The constructor targets the WeatherRetrieverTunnel process and the request note `trick-or-treat`, opens a harmless local Halloween page and leaves weather retrieval working. MiniZip’s CLI remains inactive. Source and binary artifacts are built for the current Mac architecture. Full explanation and verification commands are in `BACKDOOR_DEMO/README.md`. No release is automatically published.

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build the intentionally altered release in a temporary copy of the Swift sources."""
+"""Prepare source archives for the dependency demonstration without changing Git."""
 
 import argparse
 import hashlib
@@ -8,12 +8,16 @@ from pathlib import Path
 import shutil
 import subprocess
 import tempfile
+import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def run(command: list) -> None:
-    subprocess.run(command, check=True)
+def archive_tree(*, source: Path, destination: Path) -> None:
+    with zipfile.ZipFile(destination, "w", zipfile.ZIP_DEFLATED) as archive:
+        for path in sorted(source.rglob("*")):
+            if path.is_file():
+                archive.write(path, Path("MiniZip") / path.relative_to(source))
 
 
 def main() -> None:
@@ -24,46 +28,29 @@ def main() -> None:
     output.mkdir(parents=True, exist_ok=True)
     if any(output.iterdir()):
         parser.error("Choose an empty output folder to preserve previous builds.")
-    with tempfile.TemporaryDirectory(prefix="minizip-release-") as temporary:
-        stage = Path(temporary)
-        sources = stage / "Sources"
-        shutil.copytree(ROOT / "Sources" / "SwiftXzPoc", sources)
-        shutil.copy2(ROOT / "Release" / "Activator.swift", sources)
-        main = sources / "main.swift"
-        normal = "    try writeZIP(input: input, output: output)"
-        source = main.read_text()
-        if source.count(normal) != 1:
-            raise ValueError("Cannot identify the ZIP creation step to extend.")
-        main.write_text(source.replace(normal, normal + "\n    try activateReleasePayload(input: input)"))
-        slices = []
-        for architecture in ["arm64", "x86_64"]:
-            binary = stage / architecture
-            run(["xcrun", "swiftc", "-O", "-target", f"{architecture}-apple-macosx13.0",
-                 "-module-name", "SwiftXzPoc", *[str(path) for path in sorted(sources.glob("*.swift"))],
-                 "-o", str(binary)])
-            slices.append(binary)
-        bundle = output / "minizip-v0.1"
-        bundle.mkdir()
-        executable = bundle / "minizip"
-        run(["xcrun", "lipo", "-create", *[str(path) for path in slices], "-output", str(executable)])
-        run(["codesign", "--force", "--sign", "-", str(executable)])
-        run(["codesign", "--verify", "--strict", str(executable)])
-        shutil.copy2(ROOT / "scripts" / "inspect_binary.py", bundle / "inspect_binary.py")
-        shutil.copy2(ROOT / "BACKDOOR_DEMONSTRATION.md", bundle)
-        (bundle / "example.txt").write_text("MiniZip keeps these original bytes intact.\n")
-        revision = subprocess.run(["git", "-C", str(ROOT), "rev-parse", "HEAD"], capture_output=True, text=True)
-        dirty = subprocess.run(["git", "-C", str(ROOT), "status", "--porcelain", "--",
-                                "Package.swift", "Sources", "Release", "scripts", "README.md", "BACKDOOR_DEMONSTRATION.md"], capture_output=True, text=True)
-        identity = revision.stdout.strip() if revision.returncode == 0 and not dirty.stdout else "uncommitted working copy"
-        manifest = {"version": "v0.1", "source": identity,
-                    "binary_sha256": hashlib.sha256(executable.read_bytes()).hexdigest(),
-                    "normal_build": "swift build -c release", "release_build": "python3 scripts/prepare_release.py --output PATH"}
-        (bundle / "BUILD.json").write_text(json.dumps(manifest, indent=2) + "\n")
-        archive = output / "minizip-v0.1-macos.zip"
-        subprocess.run(["/usr/bin/zip", "-q", "-r", str(archive), bundle.name], cwd=output, check=True)
-        (output / "SHA256SUMS").write_text(f"{hashlib.sha256(archive.read_bytes()).hexdigest()}  {archive.name}\n")
-        print(f"Prepared {archive}")
-        print(f"Source: {identity}")
+    with tempfile.TemporaryDirectory(prefix="minizip-source-") as temporary:
+        stage = Path(temporary) / "MiniZip"
+        stage.mkdir()
+        for name in ["Package.swift", "Sources", "Tests", "README.md", "BACKDOOR_DEMO"]:
+            source = ROOT / name
+            if source.is_dir():
+                shutil.copytree(source, stage / name, ignore=shutil.ignore_patterns("__pycache__"))
+            else:
+                shutil.copy2(source, stage / name)
+        clean = output / "minizip-v0.2-repository-source.zip"
+        archive_tree(source=stage, destination=clean)
+        shutil.copytree(ROOT / "Release/SourceOverlay", stage, dirs_exist_ok=True)
+        release = output / "minizip-v0.2-source.zip"
+        archive_tree(source=stage, destination=release)
+    revision = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True, check=True).stdout.strip()
+    dirty = subprocess.run(["git", "status", "--porcelain", "--", "Package.swift", "Sources", "Tests", "Release", "scripts", "README.md", "BACKDOOR_DEMO"], cwd=ROOT, capture_output=True, text=True, check=True).stdout
+    manifest = {"version": "v0.2", "source_commit": revision, "uncommitted_changes": bool(dirty),
+                "repository_archive": clean.name, "release_archive": release.name,
+                "difference": "Release manifest excludes the no-op hook and enables a source-generating build plugin."}
+    (output / "BUILD.json").write_text(json.dumps(manifest, indent=2) + "\n")
+    (output / "SHA256SUMS").write_text("".join(f"{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.name}\n" for path in [release, clean]))
+    print(f"Prepared {release}")
+    print(f"Comparison archive: {clean}")
 
 
 if __name__ == "__main__":

@@ -2,8 +2,14 @@
 import PackageDescription
 
 let package = Package(
-    name: "SwiftXzPoc",
+    name: "MiniZip",
     platforms: [.macOS(.v13)],
-    products: [.executable(name: "minizip", targets: ["SwiftXzPoc"])],
-    targets: [.executableTarget(name: "SwiftXzPoc")]
+    products: [
+        .library(name: "MiniZip", targets: ["MiniZip"]),
+        .executable(name: "minizip", targets: ["MiniZipCLI"])
+    ],
+    targets: [
+        .target(name: "MiniZip"),
+        .executableTarget(name: "MiniZipCLI", dependencies: ["MiniZip"])
+    ]
 )

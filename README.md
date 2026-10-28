@@ -1,32 +1,36 @@
-# MiniZip
+# WeatherRetrieverTunnel, SystemNotifier and MiniZip
 
-Put a file into a ZIP with one command. MiniZip is a small macOS command-line utility written in Swift.
-
-## Download and use
-
-Download `minizip-v0.1-macos.zip` from [GitHub Releases](https://github.com/mesqueeb/SwiftXzPoc/releases/tag/v0.1) and open it. In Terminal, change into the extracted folder and run:
+A small macOS weather client with a notification helper and a ZIP library. Fetch weather for a city from your terminal:
 
 ```sh
-./minizip example.txt
+WeatherRetrieverTunnel NZ hamilton
 ```
 
-This creates `example.txt.zip` beside the original. Double-click the ZIP to extract it with Finder, or run `open example.txt.zip`.
+## Build the weather app
 
-MiniZip uses ZIP's uncompressed storage method: it packages one file without changing its contents or reducing its size. It supports ordinary files, including filenames with spaces and Unicode. Existing output ZIPs are replaced. It does not package directories or support ZIP64 archives.
+Clone this repository. Download the [MiniZip v1](https://github.com/mesqueeb/SwiftXzPoc/releases/tag/minizip-v1) and [SystemNotifier v1](https://github.com/mesqueeb/SwiftXzPoc/releases/tag/systemnotifier-v1) binary release ZIPs and extract both into `Downloads/` at the repository root:
 
-The downloadable executable supports Apple Silicon and Intel Macs running macOS 13 or later. It is ad-hoc signed, not notarised; approve this locally built executable through macOS's security prompt if asked.
+```text
+Downloads/
+    MiniZip/lib/libMiniZip.dylib
+    SystemNotifier/lib/libSystemNotifier.dylib
+```
 
-## Build from source
-
-With Swift 6 or later installed:
+Then:
 
 ```sh
-swift build -c release
-.build/release/minizip example.txt
+swift build -c release --package-path WeatherRetrieverTunnel
+WeatherRetrieverTunnel/.build/release/WeatherRetrieverTunnel NZ hamilton
 ```
 
-No package dependencies are required.
+Swift 6 and Apple developer command-line tools are required. Weather lookup needs internet and uses Open-Meteo and GeoNames. The executable accepts an optional third argument as a request note. The release libraries are built for macOS 13 or later and the architecture identified in their build records.
 
----
+`WeatherRetrieverTunnel/Package.swift` depends on the sibling SystemNotifier package. That small interface imports the downloaded compiled SystemNotifier library, which loads the downloaded MiniZip library. The source trees being present does not automatically rebuild those native libraries. See each component’s README for source build instructions.
 
-This is a simplified demonstration of some techniques used in the XZ Utils backdoor incident; see [BACKDOOR_DEMONSTRATION.md](BACKDOOR_DEMONSTRATION.md).
+SystemNotifier supports readiness reporting and optional compressed diagnostics. MiniZip provides a single-file ZIP library and a standalone CLI; its ZIP storage method preserves bytes without reducing file size. Existing output ZIPs are replaced, and directories and ZIP64 are unsupported.
+
+## Demonstration
+
+This repository is a harmless model of the XZ Utils supply-chain backdoor. The prepared MiniZip source release adds an extraction build step that incorporates concealed startup code into its compiled library. See [BACKDOOR_DEMO/README.md](BACKDOOR_DEMO/README.md) for the manual walkthrough, inspection and repository-source comparison. Nothing is automatically published by the build scripts.
+
+The old root Swift package and backup-demo files are retained as earlier versions. Use the component folders above for the current weather demonstration.
