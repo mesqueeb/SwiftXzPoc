@@ -1,0 +1,8 @@
+.build/
+.swiftpm/
+.demo/
+.DS_Store
+
+__pycache__/
+
+dist/
