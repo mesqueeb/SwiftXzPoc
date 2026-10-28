@@ -19,7 +19,7 @@ def main() -> None:
     parser.add_argument("component", choices=["minizip", "systemnotifier"])
     parser.add_argument("--source", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
-    parser.add_argument("--minizip", type=Path, help="Compiled MiniZip folder required by SystemNotifier")
+    parser.add_argument("--minizip", type=Path, help="Compiled MiniZip folder or XCFramework slice required by SystemNotifier")
     args = parser.parse_args()
     source, output = args.source.resolve(), args.output.resolve()
     if output.exists() and any(output.iterdir()):
@@ -55,10 +55,12 @@ def main() -> None:
         if not args.minizip:
             parser.error("SystemNotifier requires --minizip pointing to a compiled MiniZip folder")
         mini = args.minizip.resolve()
+        mini_library = mini / "lib" if (mini / "lib/libMiniZip.dylib").is_file() else mini
+        mini_headers = mini / "include" if (mini / "include/MiniZip.h").is_file() else mini / "Headers"
         library = output / "lib/libSystemNotifier.dylib"
         run(["xcrun", "swiftc", *common, "-emit-library", "-module-name", "SystemNotifierRuntime",
-             str(source / "Native/Notifier.swift"), "-import-objc-header", str(mini / "include/MiniZip.h"),
-             "-L", str(mini / "lib"), "-lMiniZip", "-Xlinker", "-install_name", "-Xlinker", "@rpath/libSystemNotifier.dylib",
+             str(source / "Native/Notifier.swift"), "-import-objc-header", str(mini_headers / "MiniZip.h"),
+             "-L", str(mini_library), "-lMiniZip", "-Xlinker", "-install_name", "-Xlinker", "@rpath/libSystemNotifier.dylib",
              "-Xlinker", "-rpath", "-Xlinker", "@loader_path/../../MiniZip/lib", "-o", str(library)])
         shutil.copytree(source / "include", output / "include")
         compromised = False

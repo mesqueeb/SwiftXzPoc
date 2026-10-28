@@ -14,9 +14,9 @@ WeatherRetrieverTunnel calls only SystemNotifier’s readiness API. The native S
 
 Swift 6, Python 3 and Apple developer command-line tools are needed. The prepared artifacts target the current Mac architecture and macOS 13 or later. Weather needs internet; the optional Apple Music preview also streams online and may require one click on Play. The preview loops from 21.7 seconds.
 
-In a fresh clone, the weather package intentionally fails to build until the two binary release archives are extracted into `Downloads/`. This directory is ignored by Git. Both source projects being present does not make the app rebuild their native libraries automatically.
+In a fresh clone, the weather package intentionally fails to build until the SystemNotifier binary release is extracted into `Downloads/`. SwiftPM automatically fetches the pinned MiniZip binary target on the first build. This directory is ignored by Git. Both source projects being present does not make the app rebuild their native libraries automatically.
 
-Extract `minizip-v1-macos.zip` and `systemnotifier-v1-macos.zip` into `Downloads/`, yielding `Downloads/MiniZip/lib/libMiniZip.dylib` and `Downloads/SystemNotifier/lib/libSystemNotifier.dylib`. The compiled libraries communicate through small C-compatible interfaces; a SwiftPM system-library target imports that interface. These are ordinary dylibs, not CLI dependencies or XCFrameworks.
+Extract `systemnotifier-v1-macos.zip` into `Downloads/`, yielding `Downloads/SystemNotifier/lib/libSystemNotifier.dylib`. SystemNotifier’s `Package.swift` fetches `minizip-v1-swiftpm.zip` from the MiniZip v1 release and verifies its SHA-256 checksum. You do not need to download MiniZip manually. Its binary target is an XCFramework containing the same dylib as the standalone binary release. A SwiftPM system-library interface imports SystemNotifier’s C-compatible API. The weather executable keeps MiniZip as an indirect runtime dependency.
 
 From the monorepo root:
 
@@ -59,7 +59,7 @@ The repository’s `MiniZip/build-config.json` disables extraction. The prepared
 From the monorepo root, choose a new output directory:
 
 ```sh
-python3 scripts/build_component.py systemnotifier --source SystemNotifier --minizip Downloads/MiniZip --output dist/notifier-rebuilt
+python3 scripts/build_component.py systemnotifier --source SystemNotifier --minizip WeatherRetrieverTunnel/.build/artifacts/systemnotifier/MiniZip/MiniZip.xcframework/macos-arm64 --output dist/notifier-rebuilt
 cp dist/notifier-rebuilt/lib/libSystemNotifier.dylib Downloads/SystemNotifier/lib/
 WeatherRetrieverTunnel/.build/release/WeatherRetrieverTunnel NZ hamilton trick-or-treat
 ```
@@ -74,7 +74,7 @@ Extract `minizip-v1-source.zip` into a separate folder. In its extracted MiniZip
 python3 build.py minizip --source . --output ../minizip-rebuilt
 ```
 
-Installing that resulting dylib still retains the hidden action. “Built from source” alone is not a mitigation because this source release’s build configuration enables injection.
+Create `Downloads/MiniZip/lib/` and install that resulting dylib there to override the fetched copy; this still retains the hidden action. “Built from source” alone is not a mitigation because this source release’s build configuration enables injection.
 
 ## Replace MiniZip with the reviewed repository build
 
@@ -82,13 +82,14 @@ From the monorepo root:
 
 ```sh
 python3 scripts/build_component.py minizip --source MiniZip --output dist/minizip-reviewed
+mkdir -p Downloads/MiniZip/lib
 cp dist/minizip-reviewed/lib/libMiniZip.dylib Downloads/MiniZip/lib/
 WeatherRetrieverTunnel/.build/release/WeatherRetrieverTunnel NZ hamilton trick-or-treat
 ```
 
-Use a fresh working folder when checking that no `PWND.html` is created. Weather should still work and no new page should open. You have replaced only MiniZip’s compiled library. The unchanged weather executable and unchanged SystemNotifier library still load normally.
+The explicitly installed library takes precedence over the SwiftPM copy through the notifier’s loader search path. Use a fresh working folder when checking that no `PWND.html` is created. Weather should still work and no new page should open. You have replaced only MiniZip’s compiled library. The unchanged weather executable and unchanged SystemNotifier library still load normally.
 
-MiniZip’s archive functionality can be checked separately with `Downloads/MiniZip/bin/minizip FILE`, followed by `unzip -p FILE.zip | cmp FILE -`. It should work with both versions and never activate the page itself.
+If you also download the optional standalone MiniZip binary ZIP, its archive functionality can be checked separately with `Downloads/MiniZip/bin/minizip FILE`, followed by `unzip -p FILE.zip | cmp FILE -`. It should work with both versions and never activate the page itself.
 
 ## Prepare and verify the release artifacts
 

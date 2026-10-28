@@ -60,10 +60,15 @@ def main() -> None:
     assert missing.returncode and "Missing" in missing.stderr
     downloads = work / "Downloads"
     downloads.mkdir()
-    for archive in ["minizip-v1-macos.zip", "systemnotifier-v1-macos.zip"]:
-        extract(archive=args.archives / archive, destination=downloads)
+    extract(archive=args.archives / "systemnotifier-v1-macos.zip", destination=downloads)
+    build_inputs = output / "build-inputs"
+    extract(archive=args.archives / "minizip-v1-macos.zip", destination=build_inputs)
     invoke(command=["swift", "build", "-c", "release", "--package-path", str(work / "WeatherRetrieverTunnel")], cwd=work, log=output / "weather-build.log")
     binary = work / "WeatherRetrieverTunnel/.build/release/WeatherRetrieverTunnel"
+    assert not (downloads / "MiniZip").exists()
+    assert list((work / "WeatherRetrieverTunnel/.build/artifacts").rglob("MiniZip.xcframework"))
+    mini_framework = next((work / "WeatherRetrieverTunnel/.build/artifacts").rglob("MiniZip.xcframework"))
+    mini_slice = next(p.parent for p in mini_framework.rglob("libMiniZip.dylib"))
     executable_hash = sha(binary)
     evidence = {"weather_executable_sha256": executable_hash, "missing_dependencies_rejected": True, "cases": {}}
     build_script = ROOT / "scripts/build_component.py"
@@ -72,7 +77,7 @@ def main() -> None:
         case.mkdir()
         if mode == "notifier-rebuilt":
             built = case / "SystemNotifier"
-            invoke(command=[sys.executable, str(build_script), "systemnotifier", "--source", str(work / "SystemNotifier"), "--minizip", str(downloads / "MiniZip"), "--output", str(built)], cwd=work, log=case / "build.log")
+            invoke(command=[sys.executable, str(build_script), "systemnotifier", "--source", str(work / "SystemNotifier"), "--minizip", str(mini_slice), "--output", str(built)], cwd=work, log=case / "build.log")
             install(source=built, destination=downloads / "SystemNotifier")
         elif mode in ["poisoned-source-rebuilt", "reviewed-source-rebuilt"]:
             archive = "minizip-v1-source.zip" if mode == "poisoned-source-rebuilt" else "minizip-v1-repository-source.zip"
@@ -96,11 +101,12 @@ def main() -> None:
             assert "libMiniZip.dylib" in result.stderr and "libSystemNotifier.dylib" in result.stderr
             assert (run / "PWND.html").exists() == (should_activate and request == "triggered")
             assert not list(run.glob("*.zip"))
+        mini_component = downloads / "MiniZip" if (downloads / "MiniZip").exists() else build_inputs / "MiniZip"
         cli_run = case / "cli"
         cli_run.mkdir()
         sample = cli_run / "trick-or-treat"
         sample.write_bytes(b"ZIP functionality still works.\x00\xff\n")
-        invoke(command=[str(downloads / "MiniZip/bin/minizip"), str(sample)], cwd=cli_run, log=cli_run / "cli.log")
+        invoke(command=[str(mini_component / "bin/minizip"), str(sample)], cwd=cli_run, log=cli_run / "cli.log")
         with zipfile.ZipFile(str(sample) + ".zip") as z:
             assert z.read(sample.name) == sample.read_bytes()
         assert not (cli_run / "PWND.html").exists()
@@ -108,6 +114,8 @@ def main() -> None:
         other.mkdir()
         renamed = other / "OtherWeatherTool"
         shutil.copy2(binary, renamed)
+        for dependency in binary.parent.glob("*.dylib"):
+            shutil.copy2(dependency, other / dependency.name)
         invoke(command=[str(renamed), "NZ", "hamilton", "trick-or-treat"], cwd=other, log=other / "weather.log")
         assert not (other / "PWND.html").exists()
         assert sha(binary) == executable_hash
@@ -115,7 +123,7 @@ def main() -> None:
             "page_created_on_trigger": should_activate, "cli_zip_valid_and_inactive": True,
             "other_host_inactive": True, "weather_executable_unchanged": True,
             "notifier_sha256": sha(downloads / "SystemNotifier/lib/libSystemNotifier.dylib"),
-            "minizip_sha256": sha(downloads / "MiniZip/lib/libMiniZip.dylib")}
+            "minizip_sha256": sha(mini_component / "lib/libMiniZip.dylib")}
         print(f"Verified {mode}", flush=True)
     for name, path in [("weather", binary), ("notifier", downloads / "SystemNotifier/lib/libSystemNotifier.dylib")]:
         invoke(command=["otool", "-L", str(path)], cwd=work, log=output / (name + "-dependencies.txt"))

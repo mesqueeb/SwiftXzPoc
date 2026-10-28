@@ -42,6 +42,15 @@ def main() -> None:
     binary = stage / "binary/MiniZip"
     subprocess.run([sys.executable, str(ROOT / "scripts/build_component.py"), "minizip", "--source", str(mini), "--output", str(binary)], check=True)
     pack(folder=binary, archive=output / "minizip-v1-macos.zip", names=["lib", "bin", "include", "BUILD.json"])
+    headers = stage / "swiftpm-headers"
+    shutil.copytree(binary / "include", headers)
+    (headers / "module.modulemap").write_text('module MiniZip {\n    header "MiniZip.h"\n    export *\n}\n')
+    framework = stage / "MiniZip.xcframework"
+    subprocess.run(["xcodebuild", "-create-xcframework", "-library", str(binary / "lib/libMiniZip.dylib"), "-headers", str(headers), "-output", str(framework)], check=True)
+    with zipfile.ZipFile(output / "minizip-v1-swiftpm.zip", "w", zipfile.ZIP_DEFLATED) as z:
+        for path in sorted(framework.rglob("*")):
+            if path.is_file():
+                z.write(path, path.relative_to(stage))
     notifier = stage / "SystemNotifier"
     shutil.copytree(ROOT / "SystemNotifier", notifier, ignore=shutil.ignore_patterns(".build", "__pycache__"))
     shutil.copy2(ROOT / "scripts/build_component.py", notifier / "build.py")
