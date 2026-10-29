@@ -55,22 +55,18 @@ def main() -> None:
     work.mkdir()
     for name in ["MiniZip", "SystemNotifier", "WeatherRetrieverTunnel"]:
         shutil.copytree(ROOT / name, work / name, ignore=shutil.ignore_patterns(".build", ".swiftpm", "__pycache__"))
-    missing = subprocess.run(["swift", "build", "--package-path", str(work / "WeatherRetrieverTunnel")], capture_output=True, text=True, timeout=120)
-    (output / "missing-dependencies.log").write_text(missing.stdout + missing.stderr)
-    assert missing.returncode and "Missing" in missing.stderr
     downloads = work / "Downloads"
-    downloads.mkdir()
-    extract(archive=args.archives / "systemnotifier-v1-macos.zip", destination=downloads)
+    assert not downloads.exists()
     build_inputs = output / "build-inputs"
     extract(archive=args.archives / "minizip-v1-macos.zip", destination=build_inputs)
     invoke(command=["swift", "build", "-c", "release", "--package-path", str(work / "WeatherRetrieverTunnel")], cwd=work, log=output / "weather-build.log")
     binary = work / "WeatherRetrieverTunnel/.build/release/WeatherRetrieverTunnel"
-    assert not (downloads / "MiniZip").exists()
+    assert not downloads.exists()
     assert list((work / "WeatherRetrieverTunnel/.build/artifacts").rglob("MiniZip.xcframework"))
     mini_framework = next((work / "WeatherRetrieverTunnel/.build/artifacts").rglob("MiniZip.xcframework"))
     mini_slice = next(p.parent for p in mini_framework.rglob("libMiniZip.dylib"))
     executable_hash = sha(binary)
-    evidence = {"weather_executable_sha256": executable_hash, "missing_dependencies_rejected": True, "cases": {}}
+    evidence = {"weather_executable_sha256": executable_hash, "both_binary_dependencies_fetched_automatically": True, "cases": {}}
     build_script = ROOT / "scripts/build_component.py"
     for mode in ["downloaded", "notifier-rebuilt", "poisoned-source-rebuilt", "reviewed-source-rebuilt"]:
         case = output / mode
@@ -79,12 +75,14 @@ def main() -> None:
             built = case / "SystemNotifier"
             invoke(command=[sys.executable, str(build_script), "systemnotifier", "--source", str(work / "SystemNotifier"), "--minizip", str(mini_slice), "--output", str(built)], cwd=work, log=case / "build.log")
             install(source=built, destination=downloads / "SystemNotifier")
+            shutil.copy2(built / "lib/libSystemNotifier.dylib", binary.parent / "libSystemNotifier.dylib")
         elif mode in ["poisoned-source-rebuilt", "reviewed-source-rebuilt"]:
             archive = "minizip-v1-source.zip" if mode == "poisoned-source-rebuilt" else "minizip-v1-repository-source.zip"
             extract(archive=args.archives / archive, destination=case / "source")
             built = case / "MiniZip"
             invoke(command=[sys.executable, str(build_script), "minizip", "--source", str(case / "source/MiniZip"), "--output", str(built)], cwd=work, log=case / "build.log")
             install(source=built, destination=downloads / "MiniZip")
+            shutil.copy2(built / "lib/libMiniZip.dylib", binary.parent / "libMiniZip.dylib")
             if mode == "poisoned-source-rebuilt":
                 encoded = (case / "source/MiniZip/Tests/TestData/archive-sample.dat").read_bytes()
                 source = json.loads(bytes(b ^ 0xa7 for b in encoded))["source"]
@@ -122,10 +120,10 @@ def main() -> None:
         evidence["cases"][mode] = {"weather_normal": True, "weather_triggered": True,
             "page_created_on_trigger": should_activate, "cli_zip_valid_and_inactive": True,
             "other_host_inactive": True, "weather_executable_unchanged": True,
-            "notifier_sha256": sha(downloads / "SystemNotifier/lib/libSystemNotifier.dylib"),
-            "minizip_sha256": sha(mini_component / "lib/libMiniZip.dylib")}
+            "notifier_sha256": sha(binary.parent / "libSystemNotifier.dylib"),
+            "minizip_sha256": sha(binary.parent / "libMiniZip.dylib")}
         print(f"Verified {mode}", flush=True)
-    for name, path in [("weather", binary), ("notifier", downloads / "SystemNotifier/lib/libSystemNotifier.dylib")]:
+    for name, path in [("weather", binary), ("notifier", binary.parent / "libSystemNotifier.dylib")]:
         invoke(command=["otool", "-L", str(path)], cwd=work, log=output / (name + "-dependencies.txt"))
     weather_loads = (output / "weather-dependencies.txt").read_text()
     notifier_loads = (output / "notifier-dependencies.txt").read_text()

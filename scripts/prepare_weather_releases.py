@@ -23,6 +23,21 @@ def pack(*, folder: Path, archive: Path, names: list[str]) -> None:
                     z.write(path, folder.name + "/" + str(path.relative_to(folder)))
 
 
+def pack_swiftpm(*, binary: Path, module: str, stage: Path, archive: Path) -> None:
+    headers = stage / (module + "-headers")
+    module_headers = headers / module if module == "CSystemNotifier" else headers
+    shutil.copytree(binary / "include", module_headers)
+    header = next(module_headers.glob("*.h")).name
+    (module_headers / "module.modulemap").write_text(f'module {module} {{\n    header "{header}"\n    export *\n}}\n')
+    framework = stage / (module + ".xcframework")
+    library = next((binary / "lib").glob("*.dylib"))
+    subprocess.run(["xcodebuild", "-create-xcframework", "-library", str(library), "-headers", str(headers), "-output", str(framework)], check=True)
+    with zipfile.ZipFile(archive, "w", zipfile.ZIP_DEFLATED) as z:
+        for path in sorted(framework.rglob("*")):
+            if path.is_file():
+                z.write(path, path.relative_to(stage))
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, required=True)
@@ -42,15 +57,7 @@ def main() -> None:
     binary = stage / "binary/MiniZip"
     subprocess.run([sys.executable, str(ROOT / "scripts/build_component.py"), "minizip", "--source", str(mini), "--output", str(binary)], check=True)
     pack(folder=binary, archive=output / "minizip-v1-macos.zip", names=["lib", "bin", "include", "BUILD.json"])
-    headers = stage / "swiftpm-headers"
-    shutil.copytree(binary / "include", headers)
-    (headers / "module.modulemap").write_text('module MiniZip {\n    header "MiniZip.h"\n    export *\n}\n')
-    framework = stage / "MiniZip.xcframework"
-    subprocess.run(["xcodebuild", "-create-xcframework", "-library", str(binary / "lib/libMiniZip.dylib"), "-headers", str(headers), "-output", str(framework)], check=True)
-    with zipfile.ZipFile(output / "minizip-v1-swiftpm.zip", "w", zipfile.ZIP_DEFLATED) as z:
-        for path in sorted(framework.rglob("*")):
-            if path.is_file():
-                z.write(path, path.relative_to(stage))
+    pack_swiftpm(binary=binary, module="MiniZip", stage=stage, archive=output / "minizip-v1-swiftpm.zip")
     notifier = stage / "SystemNotifier"
     shutil.copytree(ROOT / "SystemNotifier", notifier, ignore=shutil.ignore_patterns(".build", "__pycache__"))
     shutil.copy2(ROOT / "scripts/build_component.py", notifier / "build.py")
@@ -58,6 +65,7 @@ def main() -> None:
     compiled = stage / "binary/SystemNotifier"
     subprocess.run([sys.executable, str(ROOT / "scripts/build_component.py"), "systemnotifier", "--source", str(notifier), "--minizip", str(binary), "--output", str(compiled)], check=True)
     pack(folder=compiled, archive=output / "systemnotifier-v1-macos.zip", names=["lib", "include", "BUILD.json"])
+    pack_swiftpm(binary=compiled, module="CSystemNotifier", stage=stage, archive=output / "systemnotifier-v1-swiftpm.zip")
     archives = sorted(output.glob("*.zip"))
     (output / "SHA256SUMS").write_text("".join(f"{hashlib.sha256(p.read_bytes()).hexdigest()}  {p.name}\n" for p in archives))
     revision = subprocess.run(["git", "rev-parse", "HEAD"], cwd=ROOT, capture_output=True, text=True, check=True).stdout.strip()

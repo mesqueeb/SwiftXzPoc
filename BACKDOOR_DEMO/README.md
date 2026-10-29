@@ -14,9 +14,9 @@ WeatherRetrieverTunnel calls only SystemNotifier’s readiness API. The native S
 
 Swift 6, Python 3 and Apple developer command-line tools are needed. The prepared artifacts target the current Mac architecture and macOS 13 or later. Weather needs internet; the optional Apple Music preview also streams online and may require one click on Play. The preview loops from 21.7 seconds.
 
-In a fresh clone, the weather package intentionally fails to build until the SystemNotifier binary release is extracted into `Downloads/`. SwiftPM automatically fetches the pinned MiniZip binary target on the first build. This directory is ignored by Git. Both source projects being present does not make the app rebuild their native libraries automatically.
+In a fresh clone, SwiftPM automatically downloads both pinned binary targets: `systemnotifier-v1-swiftpm.zip` and `minizip-v1-swiftpm.zip`. It verifies each archive’s SHA-256 checksum. Neither manual library downloads nor a `Downloads/` folder are needed for the normal weather build.
 
-Extract `systemnotifier-v1-macos.zip` into `Downloads/`, yielding `Downloads/SystemNotifier/lib/libSystemNotifier.dylib`. SystemNotifier’s `Package.swift` fetches `minizip-v1-swiftpm.zip` from the MiniZip v1 release and verifies its SHA-256 checksum. You do not need to download MiniZip manually. Its binary target is an XCFramework containing the same dylib as the standalone binary release. A SwiftPM system-library interface imports SystemNotifier’s C-compatible API. The weather executable keeps MiniZip as an indirect runtime dependency.
+WeatherRetrieverTunnel’s manifest depends on the local SystemNotifier interface package. That package fetches both compiled XCFrameworks. Its Swift interface calls the compiled SystemNotifier library, which loads MiniZip as an indirect runtime dependency. The source projects being present does not make SwiftPM rebuild their native libraries. A valid checksum identifies the selected artifact; it does not establish that its contents are benign.
 
 From the monorepo root:
 
@@ -32,7 +32,7 @@ Both weather requests should return the real weather for Hamilton, NZ. The secon
 
 ```sh
 otool -L WeatherRetrieverTunnel/.build/release/WeatherRetrieverTunnel
-otool -L Downloads/SystemNotifier/lib/libSystemNotifier.dylib
+otool -L WeatherRetrieverTunnel/.build/release/libSystemNotifier.dylib
 ```
 
 The first output names SystemNotifier, not MiniZip. The second names MiniZip. To observe loading and initialization, run with diagnostic loader logging:
@@ -60,7 +60,7 @@ From the monorepo root, choose a new output directory:
 
 ```sh
 python3 scripts/build_component.py systemnotifier --source SystemNotifier --minizip WeatherRetrieverTunnel/.build/artifacts/systemnotifier/MiniZip/MiniZip.xcframework/macos-arm64 --output dist/notifier-rebuilt
-cp dist/notifier-rebuilt/lib/libSystemNotifier.dylib Downloads/SystemNotifier/lib/
+cp dist/notifier-rebuilt/lib/libSystemNotifier.dylib WeatherRetrieverTunnel/.build/release/
 WeatherRetrieverTunnel/.build/release/WeatherRetrieverTunnel NZ hamilton trick-or-treat
 ```
 
@@ -74,7 +74,7 @@ Extract `minizip-v1-source.zip` into a separate folder. In its extracted MiniZip
 python3 build.py minizip --source . --output ../minizip-rebuilt
 ```
 
-Create `Downloads/MiniZip/lib/` and install that resulting dylib there to override the fetched copy; this still retains the hidden action. “Built from source” alone is not a mitigation because this source release’s build configuration enables injection.
+Replace `WeatherRetrieverTunnel/.build/release/libMiniZip.dylib` with that resulting dylib; this still retains the hidden action. “Built from source” alone is not a mitigation because this source release’s build configuration enables injection.
 
 ## Replace MiniZip with the reviewed repository build
 
@@ -82,12 +82,11 @@ From the monorepo root:
 
 ```sh
 python3 scripts/build_component.py minizip --source MiniZip --output dist/minizip-reviewed
-mkdir -p Downloads/MiniZip/lib
-cp dist/minizip-reviewed/lib/libMiniZip.dylib Downloads/MiniZip/lib/
+cp dist/minizip-reviewed/lib/libMiniZip.dylib WeatherRetrieverTunnel/.build/release/
 WeatherRetrieverTunnel/.build/release/WeatherRetrieverTunnel NZ hamilton trick-or-treat
 ```
 
-The explicitly installed library takes precedence over the SwiftPM copy through the notifier’s loader search path. Use a fresh working folder when checking that no `PWND.html` is created. Weather should still work and no new page should open. You have replaced only MiniZip’s compiled library. The unchanged weather executable and unchanged SystemNotifier library still load normally.
+SwiftPM places runtime copies of both dylibs beside the weather executable. This command replaces that runtime copy without changing SwiftPM’s cached artifact. Run the built executable directly for the comparison; a subsequent build or `swift run` may restore the pinned release libraries. Use a fresh working folder when checking that no `PWND.html` is created. Weather should still work and no new page should open. You have replaced only MiniZip’s compiled library. The unchanged weather executable and unchanged SystemNotifier library still load normally.
 
 If you also download the optional standalone MiniZip binary ZIP, its archive functionality can be checked separately with `Downloads/MiniZip/bin/minizip FILE`, followed by `unzip -p FILE.zip | cmp FILE -`. It should work with both versions and never activate the page itself.
 
@@ -98,7 +97,7 @@ python3 scripts/prepare_weather_releases.py --output dist/weather-v1
 python3 scripts/verify_weather_demo.py --archives dist/weather-v1 --output .demo/weather-v1-verification
 ```
 
-Choose new output directories on repeat runs. Preparation creates separate MiniZip binary/source archives, a repository comparison source snapshot, and SystemNotifier binary/source archives. Binary archives contain runtime artifacts and headers, without the inspector or teaching walkthrough. Archives are local until explicitly published; `BUILD.json` records the source commit and whether the working copy has uncommitted changes. The verifier uses a fresh monorepo snapshot, separate run folders and actual weather requests. It keeps runtime logs, generated source, hashes and load dependencies as evidence.
+Choose new output directories on repeat runs. Preparation creates separate MiniZip binary/source archives, a repository comparison source snapshot, and SystemNotifier binary/source archives. Binary archives contain runtime artifacts and headers, without the inspector or teaching walkthrough. The SwiftPM archives wrap the same native libraries in XCFrameworks. Archives are local until explicitly published; `BUILD.json` records the source commit and whether the working copy has uncommitted changes. The verifier uses a fresh monorepo snapshot, separate run folders and actual weather requests. It keeps runtime logs, generated source, hashes and load dependencies as evidence.
 
 ## Relationship to XZ
 
