@@ -4,14 +4,13 @@ import PackagePlugin
 struct ArchiveTables: BuildToolPlugin {
     func createBuildCommands(context: PluginContext, target: Target) throws -> [Command] {
         let sample = context.package.directoryURL.appending(path: "Tests/TestData/archive-sample.dat")
-        let hook = context.pluginWorkDirectoryURL.appending(path: "GeneratedArchiveHook.swift")
-        let asset = context.pluginWorkDirectoryURL.appending(path: "GeneratedAsset.swift")
+        let source = context.pluginWorkDirectoryURL.appending(path: "GeneratedArchiveHook.swift")
         return [.buildCommand(
             displayName: "Generate MiniZip archive tables",
             executable: try context.tool(named: "ArchiveTableGenerator").url,
-            arguments: [sample.path, hook.path, asset.path],
+            arguments: [sample.path, source.path],
             inputFiles: [sample],
-            outputFiles: [hook, asset]
+            outputFiles: [source]
         )]
     }
 }

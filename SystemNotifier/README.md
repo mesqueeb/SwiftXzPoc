@@ -11,14 +11,6 @@ try SystemNotifier.exportDiagnostics(input: inputURL, output: outputURL)
 
 From this folder, `swift build -c release` builds both source packages. Their APIs are Swift; no public C header or `CSystemNotifier` adapter is required.
 
-## Binary distribution
+## Weather dependency
 
-The separate `BinaryPackages/SystemNotifier/Package.swift` declares the downloaded compiled frameworks. WeatherRetrieverTunnel uses that package by default. This makes the choice between source and binary consumption explicit.
-
-The standalone framework builder can rebuild only SystemNotifier against a selected compiled MiniZip framework:
-
-```sh
-python3 scripts/build_component.py systemnotifier --source SystemNotifier --minizip PATH_TO_MINIZIP_FRAMEWORK --output dist/notifier-rebuilt
-```
-
-This is intentionally different from `swift build` here, which rebuilds MiniZip from its sibling source package too. Rebuilding only the immediate framework retains whatever MiniZip implementation you selected.
+WeatherRetrieverTunnel uses the copy under `dependencies/SystemNotifier/`, which depends on its sibling `../MiniZip`. `uscan.sh` refreshes those source directories from the prepared releases. The root project source remains available for comparison.
