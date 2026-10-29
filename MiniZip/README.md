@@ -17,4 +17,4 @@ The ZIP storage method preserves original bytes without reducing size. It suppor
 
 ## Source-release demonstration
 
-The repository manifest builds reviewed sources without generating additional runtime code. The prepared source release adds a build plugin from `ReleaseOverlay/` that decodes test data and compiles a generated Swift function, plus a native startup bridge. That plugin runs during an ordinary SwiftPM build of the prepared release. See the monorepo’s main README for the full demonstration walkthrough.
+Run `swift test` to ZIP the generated sample bytes, extract the archive and verify that the bytes match. The reviewed package uses its archive-data generator only for this test. The prepared release applies that existing plugin to the library too, alters the generator to decode concealed source and adds a native startup bridge. `ReleaseOverlay/` contains those release changes. See the monorepo’s main README for the full demonstration walkthrough.

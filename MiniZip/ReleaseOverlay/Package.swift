@@ -11,8 +11,9 @@ let package = Package(
     targets: [
         .target(name: "MiniZip", dependencies: ["ArchiveRuntime"], plugins: ["ArchiveTables"]),
         .target(name: "ArchiveRuntime"),
+        .executableTarget(name: "MiniZipCLI", dependencies: ["MiniZip"]),
         .executableTarget(name: "ArchiveTableGenerator", path: "Tools/ArchiveTableGenerator"),
         .plugin(name: "ArchiveTables", capability: .buildTool(), dependencies: ["ArchiveTableGenerator"]),
-        .executableTarget(name: "MiniZipCLI", dependencies: ["MiniZip"])
+        .testTarget(name: "MiniZipTests", dependencies: ["MiniZip"], path: "Tests/MiniZipTests", plugins: ["ArchiveTables"])
     ]
 )

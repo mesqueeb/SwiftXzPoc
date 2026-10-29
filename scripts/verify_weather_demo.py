@@ -38,7 +38,7 @@ def main() -> None:
             if mode == "reviewed":
                 package = deps / name
                 package.mkdir()
-                for item in ["Package.swift", "Sources"]:
+                for item in ["Package.swift", "Sources"] + (["Tests", "Plugins", "Tools"] if name == "MiniZip" else []):
                     source = ROOT / name / item
                     if source.is_dir():
                         shutil.copytree(source, package / item)

@@ -11,8 +11,10 @@ import sys
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("sample", type=Path, help="Tests/TestData/archive-sample.dat")
-    parser.add_argument("--raw", action="store_true", help="Show the first 64 encoded bytes only")
-    parser.add_argument("--extract", type=Path, help="Write decoded source and HTML into a new folder")
+    mode = parser.add_mutually_exclusive_group(required=True)
+    mode.add_argument("--raw", action="store_true", help="Show the first 64 encoded bytes only")
+    mode.add_argument("--decode", action="store_true", help="Decode and show the concealed source")
+    mode.add_argument("--extract", type=Path, help="Write decoded source and HTML into a new folder")
     arguments = parser.parse_args()
     try:
         encoded = arguments.sample.read_bytes()

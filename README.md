@@ -24,10 +24,10 @@ Show the encoded bytes, then decode them:
 
 ```sh
 python3 BACKDOOR_DEMO/inspect_binary.py dependencies/MiniZip/Tests/TestData/archive-sample.dat --raw
-python3 BACKDOOR_DEMO/inspect_binary.py dependencies/MiniZip/Tests/TestData/archive-sample.dat
+python3 BACKDOOR_DEMO/inspect_binary.py dependencies/MiniZip/Tests/TestData/archive-sample.dat --decode
 ```
 
-The release’s `ArchiveTables` plugin decodes this test data into Swift source during compilation. A small C constructor calls the generated function when MiniZip loads. WeatherRetrieverTunnel never calls a ZIP function.
+The reviewed package uses `ArchiveTables` to supply sample bytes for a real ZIP round-trip test. The release attaches that plugin to the library and alters its generator to extract concealed source. A C constructor calls the generated function when MiniZip loads. WeatherRetrieverTunnel never calls a ZIP function.
 
 ## 3. Check the loaded libraries
 
@@ -41,19 +41,20 @@ SystemNotifier brings MiniZip into the weather process through its optional diag
 
 ## Compare with reviewed sources
 
-Start with no `dependencies/` directory; preserve any existing copy before switching.
+Change the dependency in `WeatherRetrieverTunnel/Package.swift`:
+
+```diff
+- dependencies: [.package(path: "../dependencies/SystemNotifier")],
++ dependencies: [.package(path: "../SystemNotifier")],
+```
+
+Run the same command again:
 
 ```sh
-mkdir dependencies
-mkdir dependencies/MiniZip dependencies/SystemNotifier
-cp MiniZip/Package.swift dependencies/MiniZip/
-cp -R MiniZip/Sources dependencies/MiniZip/
-cp SystemNotifier/Package.swift dependencies/SystemNotifier/
-cp -R SystemNotifier/Sources dependencies/SystemNotifier/
 swift run --package-path WeatherRetrieverTunnel WeatherRetrieverTunnel NZ Hamilton trick-or-treat
 ```
 
-The reviewed build reports weather without activating the payload. Run `./uscan.sh` afterward to switch to the prepared releases.
+Both dependencies rebuild from the reviewed root sources. Weather works without activating the payload; no clean build is needed. Restore the original path to use the downloaded releases again.
 
 ## Prepare release ZIPs
 

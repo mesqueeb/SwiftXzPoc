@@ -29,7 +29,8 @@ def main() -> None:
                 else:
                     shutil.copy2(source, package / item)
             if name == "MiniZip":
-                shutil.copytree(ROOT / "MiniZip/Tests", package / "Tests")
+                for folder in ["Tests", "Plugins", "Tools"]:
+                    shutil.copytree(ROOT / "MiniZip" / folder, package / folder)
                 shutil.copytree(ROOT / "MiniZip/ReleaseOverlay", package, dirs_exist_ok=True)
             filename = name.lower() + "-v1-swiftpm-source.zip"
             with zipfile.ZipFile(output / filename, "w", zipfile.ZIP_DEFLATED) as archive:
