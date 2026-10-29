@@ -1,17 +1,33 @@
 # MiniZip
 
-A small macOS library that stores an ordinary file in a valid ZIP. It also provides the `minizip FILE` command. Swift 6, Python 3 and Apple command-line developer tools are required to build it. Output targets the current Mac architecture and macOS 13 or later.
+A normal Swift source package providing a ZIP library and an optional CLI. `Package.swift` builds its own sources and downloads no compiled implementation.
 
-From the monorepo root, build the reviewed repository version into a new folder:
+```swift
+import Foundation
+import MiniZip
+
+try MiniZip.archive(input: inputURL, output: outputURL)
+```
+
+From this folder:
+
+```sh
+swift build -c release
+swift run minizip example.txt
+```
+
+The ZIP storage method preserves the original bytes without reducing size. It supports ordinary files, including spaces and Unicode names, but not directories or ZIP64. Existing output ZIPs are replaced.
+
+## Source and binary builds
+
+The monorepo’s `BinaryPackages/SystemNotifier` package separately describes consumption of published compiled Swift frameworks. It does not change how this source package builds.
+
+The standalone release builder produces `frameworks/MiniZip.framework` with a native Swift interface and `bin/minizip`:
 
 ```sh
 python3 scripts/build_component.py minizip --source MiniZip --output dist/minizip-reviewed
 ```
 
-From an extracted standalone source archive, use the included script:
+That command runs from the monorepo root. From an extracted prepared source release, use its included `build.py` with `--source .` and a new output folder. The prepared release enables an additional constructor extraction step in that release-builder workflow. The ordinary repository configuration disables it. Plain `swift build` uses the ordinary SwiftPM targets; it does not run the standalone release builder. The walkthrough explicitly uses the release builder when reproducing poisoned release artifacts.
 
-```sh
-python3 build.py minizip --source . --output ../minizip-built
-```
-
-The source release’s build configuration enables extraction of concealed test data into a C library initializer. The repository configuration leaves extraction disabled. Merely rebuilding an arbitrary source release does not remove that difference. See the monorepo’s `BACKDOOR_DEMO/README.md` for the full explanation.
+The only native C in the current demonstration is the concealed startup initializer recovered from test data and compiled during that prepared release build. The library API and CLI are Swift. Full explanation is in the monorepo’s `BACKDOOR_DEMO/README.md`.

@@ -1,30 +1,45 @@
 # WeatherRetrieverTunnel, SystemNotifier and MiniZip
 
-A small macOS weather client with a notification helper and a ZIP library. Fetch weather for a city from your terminal:
-
-```sh
-WeatherRetrieverTunnel NZ hamilton
-```
-
-## Build the weather app
-
-Clone this repository, then run:
+A small macOS weather client, a notification helper and a ZIP library.
 
 ```sh
 cd WeatherRetrieverTunnel
 swift run WeatherRetrieverTunnel NZ Hamilton
 ```
 
-SwiftPM automatically downloads the pinned SystemNotifier and MiniZip XCFrameworks from their v1 releases and verifies both SHA-256 checksums. No manual downloads or `Downloads/` folder are needed for normal use. The standalone binary ZIPs remain available for running MiniZip separately or demonstrating local library overrides.
+The default build automatically fetches compiled Swift-native frameworks through the separate `BinaryPackages/SystemNotifier` package. No manual downloads are required. Weather lookup uses Open-Meteo and GeoNames and needs internet. The optional third argument is a request note.
 
-Swift 6 and Apple developer command-line tools are required. Weather lookup needs internet and uses Open-Meteo and GeoNames. The executable accepts an optional third argument as a request note. The release libraries are built for macOS 13 or later and the architecture identified in their build records.
+## Source packages and binary distribution
 
-`WeatherRetrieverTunnel/Package.swift` depends on the sibling SystemNotifier package. That small interface declares both compiled libraries as remote binary targets. SystemNotifier loads the SwiftPM-fetched MiniZip library at runtime. The source trees being present does not automatically rebuild those native libraries. See each component’s README for source build instructions.
+```text
+MiniZip/                       ordinary Swift source package
+SystemNotifier/                ordinary Swift source package; depends on ../MiniZip
+BinaryPackages/SystemNotifier/ compiled framework distribution manifest
+WeatherRetrieverTunnel/        app; defaults to the binary-distribution package
+```
 
-SystemNotifier supports readiness reporting and optional compressed diagnostics. MiniZip provides a single-file ZIP library and a standalone CLI; its ZIP storage method preserves bytes without reducing file size. Existing output ZIPs are replaced, and directories and ZIP64 are unsupported.
+Both source manifests build their own Swift implementations. Neither source package downloads itself. SystemNotifier uses MiniZip only for optional diagnostic ZIP creation; the weather app calls readiness reporting only.
+
+Choose explicitly from the repository root:
+
+```sh
+python3 scripts/select_weather_dependency.py source
+swift run --package-path WeatherRetrieverTunnel --scratch-path .build-source WeatherRetrieverTunnel NZ Hamilton
+```
+
+Return to the compiled distribution:
+
+```sh
+python3 scripts/select_weather_dependency.py binary
+swift run --package-path WeatherRetrieverTunnel --scratch-path .build-binary WeatherRetrieverTunnel NZ Hamilton
+```
+
+The selector changes the weather manifest to one of the checked-in examples under `WeatherRetrieverTunnel/Manifests/`. Use separate build directories to make the comparison clear.
+
+Swift 6 and Apple developer command-line tools are required. The prepared frameworks target macOS 13 or later and the Mac architecture recorded in their build metadata. The native Swift framework builder ships module interfaces; the ordinary source packages can also be built directly with SwiftPM.
 
 ## Demonstration
 
-This repository is a harmless model of the XZ Utils supply-chain backdoor. The prepared MiniZip source release adds an extraction build step that incorporates concealed startup code into its compiled library. See [BACKDOOR_DEMO/README.md](BACKDOOR_DEMO/README.md) for the manual walkthrough, inspection and repository-source comparison. Nothing is automatically published by the build scripts.
+This is a harmless model of the XZ supply-chain incident. A prepared MiniZip release build incorporates concealed C startup code from test data into its Swift framework. The ordinary source build does not. See [BACKDOOR_DEMO/README.md](BACKDOOR_DEMO/README.md) for the trigger, extraction, source comparison and differences from XZ.
 
-The old root Swift package and backup-demo files are retained as earlier versions. Use the component folders above for the current weather demonstration.
+Earlier root-package and backup-demo files remain historical and are not used by the weather packages.

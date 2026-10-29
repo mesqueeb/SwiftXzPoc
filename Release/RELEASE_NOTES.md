@@ -1,7 +1,9 @@
-# Weather dependency demonstration v1
+# Swift-native source and binary separation
 
-The current monorepo contains WeatherRetrieverTunnel, SystemNotifier and MiniZip. WeatherRetrieverTunnel links a compiled legitimate SystemNotifier dylib, which depends on the compiled MiniZip dylib. Only readiness is called; compression is not needed to activate the demonstration’s concealed library constructor.
+The normal source packages are `MiniZip/` and `SystemNotifier/`. Their manifests build their own Swift implementations, with SystemNotifier depending on the sibling MiniZip source. Neither downloads its own implementation.
 
-Prepare local artifacts with `scripts/prepare_weather_releases.py`. Publish MiniZip and SystemNotifier as separate component release families only after approval. Each has a binary archive and a source archive; MiniZip also has a repository-source comparison snapshot. The prepared MiniZip source release enables extraction of encoded test data into a C startup constructor. The repository configuration disables extraction.
+`BinaryPackages/SystemNotifier/` is the separate compiled-distribution manifest used by WeatherRetrieverTunnel by default. It fetches Swift-native SystemNotifier and MiniZip XCFrameworks. The older v1 C-interface assets are preserved; the new artifact names contain `swift-native` and expose normal Swift APIs.
 
-The constructor targets the WeatherRetrieverTunnel process and the request note `trick-or-treat`, opens a harmless local Halloween page and leaves weather retrieval working. MiniZip’s CLI remains inactive. Source and binary artifacts are built for the current Mac architecture. Full explanation and verification commands are in `BACKDOOR_DEMO/README.md`. No release is automatically published.
+The only C required by the active demonstration is the concealed library constructor. The standalone prepared-release builder extracts and compiles it from test data. Plain SwiftPM source builds use the ordinary reviewed targets and stay inactive. The walkthrough explicitly distinguishes those two build workflows.
+
+Select `source` or `binary` with `scripts/select_weather_dependency.py`, then use a separate build directory. Tests cover both paths, framework replacement comparisons, CLI extraction and the indirect runtime dependency chain. Source changes remain uncommitted until requested.

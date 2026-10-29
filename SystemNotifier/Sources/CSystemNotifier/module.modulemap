@@ -1,5 +1,0 @@
-module CSystemNotifier [system] {
-    header "../../include/SystemNotifier.h"
-    link "SystemNotifier"
-    export *
-}

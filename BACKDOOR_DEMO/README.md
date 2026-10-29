@@ -1,108 +1,95 @@
 # Backdoor demonstration
 
-The current monorepo models a compiled runtime dependency chain:
+The normal source packages and compiled distribution are deliberately separate:
 
 ```text
-WeatherRetrieverTunnel (Swift executable)
-    → libSystemNotifier.dylib (legitimate Swift library)
-        → libMiniZip.dylib (Swift library with a release-only C initializer)
+WeatherRetrieverTunnel → BinaryPackages/SystemNotifier → compiled Swift frameworks
+
+SystemNotifier source package → MiniZip source package
 ```
 
-WeatherRetrieverTunnel calls only SystemNotifier’s readiness API. The native SystemNotifier library has an optional diagnostic ZIP function that depends on MiniZip. The dynamic loader therefore loads MiniZip into the weather process even though the program never calls compression.
+The runtime binary chain remains `WeatherRetrieverTunnel → SystemNotifier.framework → MiniZip.framework`. WeatherRetrieverTunnel calls only `SystemNotifier.notifyReady()`. The notifier framework depends on MiniZip for its optional diagnostic export function, so MiniZip loads even though no compression is requested.
 
-## Local rehearsal
+## Normal and triggered runs
 
-Swift 6, Python 3 and Apple developer command-line tools are needed. The prepared artifacts target the current Mac architecture and macOS 13 or later. Weather needs internet; the optional Apple Music preview also streams online and may require one click on Play. The preview loops from 21.7 seconds.
-
-In a fresh clone, SwiftPM automatically downloads both pinned binary targets: `systemnotifier-v1-swiftpm.zip` and `minizip-v1-swiftpm.zip`. It verifies each archive’s SHA-256 checksum. Neither manual library downloads nor a `Downloads/` folder are needed for the normal weather build.
-
-WeatherRetrieverTunnel’s manifest depends on the local SystemNotifier interface package. That package fetches both compiled XCFrameworks. Its Swift interface calls the compiled SystemNotifier library, which loads MiniZip as an indirect runtime dependency. The source projects being present does not make SwiftPM rebuild their native libraries. A valid checksum identifies the selected artifact; it does not establish that its contents are benign.
-
-From the monorepo root:
+From the repository root:
 
 ```sh
+python3 scripts/select_weather_dependency.py binary
 swift build -c release --package-path WeatherRetrieverTunnel
-WeatherRetrieverTunnel/.build/release/WeatherRetrieverTunnel NZ hamilton
-WeatherRetrieverTunnel/.build/release/WeatherRetrieverTunnel NZ hamilton trick-or-treat
+WeatherRetrieverTunnel/.build/release/WeatherRetrieverTunnel NZ Hamilton
+WeatherRetrieverTunnel/.build/release/WeatherRetrieverTunnel NZ Hamilton trick-or-treat
 ```
 
-Both weather requests should return the real weather for Hamilton, NZ. The second also writes `PWND.html` in the current working folder and opens Safari. The app treats the third argument as an ordinary note. Only the concealed library initializer recognises its exact value. Use a fresh working folder for each negative comparison so an old page cannot be mistaken for a new one.
+Both requests return current weather. The second also opens the local Halloween page. The app prints the third argument as an ordinary note; only the concealed initializer recognises its value. The initializer checks the host process name and runs before main. MiniZip’s CLI does not activate it. The optional streamed preview repeats from 21.7 seconds and may require Play if autoplay is blocked.
 
-## Show the runtime dependency path
-
-```sh
-otool -L WeatherRetrieverTunnel/.build/release/WeatherRetrieverTunnel
-otool -L WeatherRetrieverTunnel/.build/release/libSystemNotifier.dylib
-```
-
-The first output names SystemNotifier, not MiniZip. The second names MiniZip. To observe loading and initialization, run with diagnostic loader logging:
-
-```sh
-DYLD_PRINT_LIBRARIES=1 DYLD_PRINT_INITIALIZERS=1 WeatherRetrieverTunnel/.build/release/WeatherRetrieverTunnel NZ hamilton
-```
-
-These variables enable diagnostic logging only; they do not activate the payload. The native constructor runs before the weather app’s main code. It checks its host process name and the note argument. It does not wait for a ZIP call. MiniZip’s standalone CLI remains inactive because it is a different host process.
-
-## Reveal the concealed source
+## Inspect the actual concealed source
 
 ```sh
 python3 BACKDOOR_DEMO/inspect_binary.py MiniZip/Tests/TestData/archive-sample.dat --raw
 python3 BACKDOOR_DEMO/inspect_binary.py MiniZip/Tests/TestData/archive-sample.dat
 ```
 
-The inspector shows actual encoded bytes, then recovers C source by XORing them with `0xa7` and decoding JSON. Despite its historical name, it inspects a binary test-data file, not a compiled executable. It neither runs the source nor decompiles Swift. HTML is omitted by default. Use `--extract revealed` with a new output directory to inspect the source and asset separately.
+The inspector reads actual bytes, XORs them with `0xa7` and decodes JSON. It shows the recovered C constructor, without dumping HTML. It neither executes that source nor decompiles a compiled executable. Use `--extract revealed` with a new folder to inspect the HTML too.
 
-The repository’s `MiniZip/build-config.json` disables extraction. The prepared source release enables it. `scripts/build_component.py` decodes the test data, writes `build/GeneratedStartup.c` and a separate asset header, compiles the constructor, and links it into the dylib. Compare that generated C file with the inspector’s recovered source. The constructor uses Apple’s library initialization mechanism; see [Apple’s dynamic library design guidelines](https://developer.apple.com/library/archive/documentation/DeveloperTools/Conceptual/DynamicLibraries/100-Articles/DynamicLibraryDesignGuidelines.html).
+This small constructor is the only C needed by the active demonstration. MiniZip, SystemNotifier, their public APIs and the CLI are Swift. The old C-compatible exported interfaces and `CSystemNotifier` adapter have been removed from these components.
 
-## Rebuild only SystemNotifier
-
-From the monorepo root, choose a new output directory:
+## Build the reviewed source packages
 
 ```sh
-python3 scripts/build_component.py systemnotifier --source SystemNotifier --minizip WeatherRetrieverTunnel/.build/artifacts/systemnotifier/MiniZip/MiniZip.xcframework/macos-arm64 --output dist/notifier-rebuilt
-cp dist/notifier-rebuilt/lib/libSystemNotifier.dylib WeatherRetrieverTunnel/.build/release/
-WeatherRetrieverTunnel/.build/release/WeatherRetrieverTunnel NZ hamilton trick-or-treat
+python3 scripts/select_weather_dependency.py source
+swift build -c release --package-path WeatherRetrieverTunnel --scratch-path .build-source
+.build-source/release/WeatherRetrieverTunnel NZ Hamilton trick-or-treat
 ```
 
-The hidden action remains: you rebuilt the legitimate immediate dependency, but it still loads the downloaded compromised MiniZip. The weather executable does not need recompilation for this comparison.
+The weather manifest now points to `../SystemNotifier`, whose manifest points to `../MiniZip`. Both are ordinary source packages. Weather still works and no page should open. Use a fresh working directory when checking for absence of `PWND.html`.
 
-## Rebuild the poisoned source release
+## Rebuild only SystemNotifier against the compiled MiniZip
 
-Extract `minizip-v1-source.zip` into a separate folder. In its extracted MiniZip directory:
+Keep the default binary build for this comparison. Build SystemNotifier’s own Swift source into a framework, explicitly choosing the compiled MiniZip it links:
+
+```sh
+python3 scripts/build_component.py systemnotifier --source SystemNotifier --minizip WeatherRetrieverTunnel/.build/release/MiniZip.framework --output dist/notifier-rebuilt
+```
+
+Copy the resulting `frameworks/SystemNotifier.framework` over the weather build’s runtime copy, preserving the framework layout. Run the already-built weather executable directly. The hidden action remains because MiniZip is unchanged. A later SwiftPM build can restore the pinned frameworks, so use direct executable runs during replacement comparisons.
+
+This standalone release-builder command is intentionally different from `swift build --package-path SystemNotifier`, which builds the full source dependency graph, including reviewed MiniZip.
+
+## Reproduce a poisoned MiniZip source release
+
+The prepared source archive contains a `build.py` release builder and a configuration enabling extraction. From that extracted MiniZip folder:
 
 ```sh
 python3 build.py minizip --source . --output ../minizip-rebuilt
 ```
 
-Replace `WeatherRetrieverTunnel/.build/release/libMiniZip.dylib` with that resulting dylib; this still retains the hidden action. “Built from source” alone is not a mitigation because this source release’s build configuration enables injection.
+Its `build/GeneratedStartup.c` matches the inspector’s recovered source. The builder compiles that source and links it into MiniZip.framework. A reviewed repository build uses the same command with extraction disabled. Installing that reviewed framework in place of the runtime MiniZip framework removes the extra action without changing the weather executable or SystemNotifier.
 
-## Replace MiniZip with the reviewed repository build
+Plain `swift build` in the source packages builds their ordinary SwiftPM targets. The poisoned-source comparison specifically reproduces the standalone release-builder workflow; it does not claim that merely extracting that archive makes all build commands execute the constructor.
 
-From the monorepo root:
-
-```sh
-python3 scripts/build_component.py minizip --source MiniZip --output dist/minizip-reviewed
-cp dist/minizip-reviewed/lib/libMiniZip.dylib WeatherRetrieverTunnel/.build/release/
-WeatherRetrieverTunnel/.build/release/WeatherRetrieverTunnel NZ hamilton trick-or-treat
-```
-
-SwiftPM places runtime copies of both dylibs beside the weather executable. This command replaces that runtime copy without changing SwiftPM’s cached artifact. Run the built executable directly for the comparison; a subsequent build or `swift run` may restore the pinned release libraries. Use a fresh working folder when checking that no `PWND.html` is created. Weather should still work and no new page should open. You have replaced only MiniZip’s compiled library. The unchanged weather executable and unchanged SystemNotifier library still load normally.
-
-If you also download the optional standalone MiniZip binary ZIP, its archive functionality can be checked separately with `Downloads/MiniZip/bin/minizip FILE`, followed by `unzip -p FILE.zip | cmp FILE -`. It should work with both versions and never activate the page itself.
-
-## Prepare and verify the release artifacts
+## Verify packaging and runtime dependencies
 
 ```sh
-python3 scripts/prepare_weather_releases.py --output dist/weather-v1
-python3 scripts/verify_weather_demo.py --archives dist/weather-v1 --output .demo/weather-v1-verification
+otool -L WeatherRetrieverTunnel/.build/release/WeatherRetrieverTunnel
+otool -L WeatherRetrieverTunnel/.build/release/SystemNotifier.framework/SystemNotifier
 ```
 
-Choose new output directories on repeat runs. Preparation creates separate MiniZip binary/source archives, a repository comparison source snapshot, and SystemNotifier binary/source archives. Binary archives contain runtime artifacts and headers, without the inspector or teaching walkthrough. The SwiftPM archives wrap the same native libraries in XCFrameworks. Archives are local until explicitly published; `BUILD.json` records the source commit and whether the working copy has uncommitted changes. The verifier uses a fresh monorepo snapshot, separate run folders and actual weather requests. It keeps runtime logs, generated source, hashes and load dependencies as evidence.
+The executable loads SystemNotifier, and SystemNotifier loads MiniZip. The executable has no direct MiniZip load. SwiftPM’s binary product supplies both framework modules for compilation, but linker stripping preserves the indirect runtime chain.
+
+The source manifests under `MiniZip/` and `SystemNotifier/` contain no binary targets. Only `BinaryPackages/SystemNotifier/Package.swift` describes binary consumption. Select source or binary through the explicit weather manifest examples rather than an implicit environment switch.
+
+## Prepare and test new artifacts
+
+```sh
+python3 scripts/prepare_weather_releases.py --output dist/weather-swift-native
+python3 scripts/verify_weather_demo.py --archives dist/weather-swift-native --output .demo/swift-native-check
+```
+
+Use new output folders each run. The artifact names include `swift-native` to distinguish this Swift ABI from the original C-interface v1 downloads. Original release assets are preserved. The verifier extracts fresh archives, tests ordinary and triggered weather, compares immediate and full dependency rebuilds, verifies generated-source correspondence, and checks CLI ZIP contents.
 
 ## Relationship to XZ
 
-The corresponding roles are WeatherRetrieverTunnel for `sshd`, SystemNotifier for the systemd integration, and MiniZip for `liblzma`. The important shared property is a legitimate compiled dependency pulling a compromised compiled transitive dependency into the same process without a compression call. The altered source release produces the malicious compiled library. See [Freund’s original disclosure](https://www.openwall.com/lists/oss-security/2024/03/29/4).
+The demonstration models a legitimate compiled dependency bringing a compromised compiled transitive dependency into the same process without a compression call. A modified source-release build extracts concealed test material and incorporates it into the compiled library. See [Freund’s original disclosure](https://www.openwall.com/lists/oss-security/2024/03/29/4).
 
-This model uses a macOS constructor, a process-name check and a local command-line note instead of XZ’s function resolution and attacker-signed SSH input. It is not an authentication bypass or SSH exploit, and the process name is not authentication. Activation occurs from initial process arguments rather than a later remote connection. The payload only writes and opens the local Halloween page; it cannot execute arbitrary supplied commands. The weather client uses HTTPS to Open-Meteo; it does not implement a secure tunnel.
-
-Earlier backup demos and their evidence remain in the repository and vault. They are superseded for this presentation and are not used by the weather packages.
+Our macOS constructor, host-name check and local note replace XZ’s function resolution and attacker-signed SSH input. The constructor reads initial arguments rather than waiting for a later remote connection. It only writes and opens a local page and cannot execute arbitrary supplied commands. The weather client uses HTTPS, not SSH or a custom secure tunnel. Swift globals are lazy; the small native constructor is retained specifically to demonstrate execution on library load.

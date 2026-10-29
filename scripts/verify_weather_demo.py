@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Verify the compiled dependency chain using fresh local release archives and real weather requests."""
+"""Verify Swift-native binary packages, reviewed source packages and the concealed initializer."""
 
 import argparse
 import hashlib
@@ -7,6 +7,7 @@ import json
 import os
 from pathlib import Path
 import shutil
+import stat
 import subprocess
 import sys
 import zipfile
@@ -14,34 +15,33 @@ import zipfile
 ROOT = Path(__file__).resolve().parents[1]
 
 
-def sha(path: Path) -> str:
+def extract(*, archive: Path, destination: Path) -> None:
+    with zipfile.ZipFile(archive) as z:
+        for info in z.infolist():
+            path = destination / info.filename
+            path.parent.mkdir(parents=True, exist_ok=True)
+            mode = info.external_attr >> 16
+            if stat.S_ISLNK(mode):
+                path.symlink_to(z.read(info).decode())
+            else:
+                path.write_bytes(z.read(info))
+                path.chmod(mode & 0o777 or 0o644)
+
+
+def run(*, command: list[str], cwd: Path, log: Path, env: dict | None = None) -> str:
+    result = subprocess.run(command, cwd=cwd, env=env, capture_output=True, text=True, timeout=120)
+    log.write_text(result.stdout + result.stderr)
+    if result.returncode:
+        raise RuntimeError(f"Command failed; see {log}")
+    return result.stdout
+
+
+def digest(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
 
 
-def invoke(*, command: list[str], cwd: Path, log: Path, env: dict | None = None, expected: int = 0) -> subprocess.CompletedProcess:
-    result = subprocess.run(command, cwd=cwd, env=env, capture_output=True, text=True, timeout=120)
-    log.write_text(result.stdout + result.stderr)
-    if result.returncode != expected:
-        raise RuntimeError(f"Expected {expected}, got {result.returncode}; see {log}")
-    return result
-
-
-def extract(*, archive: Path, destination: Path) -> None:
-    with zipfile.ZipFile(archive) as z:
-        z.extractall(destination)
-        for info in z.infolist():
-            mode = (info.external_attr >> 16) & 0o777
-            if mode:
-                (destination / info.filename).chmod(mode)
-
-
-def install(*, source: Path, destination: Path) -> None:
-    for name in ["lib", "bin", "include", "BUILD.json"]:
-        path = source / name
-        if path.is_dir():
-            shutil.copytree(path, destination / name, dirs_exist_ok=True)
-        elif path.exists():
-            shutil.copy2(path, destination / name)
+def replace_framework(*, source: Path, destination: Path) -> None:
+    shutil.copytree(source, destination, dirs_exist_ok=True, symlinks=False)
 
 
 def main() -> None:
@@ -49,99 +49,70 @@ def main() -> None:
     parser.add_argument("--archives", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
     args = parser.parse_args()
-    output = args.output.resolve()
-    output.mkdir(parents=True, exist_ok=False)
-    work = output / "clone"
-    work.mkdir()
-    for name in ["MiniZip", "SystemNotifier", "WeatherRetrieverTunnel"]:
-        shutil.copytree(ROOT / name, work / name, ignore=shutil.ignore_patterns(".build", ".swiftpm", "__pycache__"))
-    downloads = work / "Downloads"
-    assert not downloads.exists()
-    build_inputs = output / "build-inputs"
-    extract(archive=args.archives / "minizip-v1-macos.zip", destination=build_inputs)
-    invoke(command=["swift", "build", "-c", "release", "--package-path", str(work / "WeatherRetrieverTunnel")], cwd=work, log=output / "weather-build.log")
-    binary = work / "WeatherRetrieverTunnel/.build/release/WeatherRetrieverTunnel"
-    assert not downloads.exists()
-    assert list((work / "WeatherRetrieverTunnel/.build/artifacts").rglob("MiniZip.xcframework"))
-    mini_framework = next((work / "WeatherRetrieverTunnel/.build/artifacts").rglob("MiniZip.xcframework"))
-    mini_slice = next(p.parent for p in mini_framework.rglob("libMiniZip.dylib"))
-    executable_hash = sha(binary)
-    evidence = {"weather_executable_sha256": executable_hash, "both_binary_dependencies_fetched_automatically": True, "cases": {}}
-    build_script = ROOT / "scripts/build_component.py"
-    for mode in ["downloaded", "notifier-rebuilt", "poisoned-source-rebuilt", "reviewed-source-rebuilt"]:
-        case = output / mode
-        case.mkdir()
+    output = args.output.resolve();output.mkdir(parents=True, exist_ok=False)
+    clone = output / "clone";clone.mkdir()
+    for name in ["MiniZip", "SystemNotifier", "WeatherRetrieverTunnel", "BinaryPackages"]:
+        shutil.copytree(ROOT / name, clone / name, ignore=shutil.ignore_patterns(".build", ".swiftpm", "Artifacts", ".vscode"))
+    artifacts = clone / "BinaryPackages/SystemNotifier/Artifacts"
+    for name in ["minizip", "systemnotifier"]:
+        extract(archive=args.archives / (name + "-v1-swift-native.zip"), destination=artifacts)
+    manifest = clone / "BinaryPackages/SystemNotifier/Package.swift"
+    manifest.write_text('''// swift-tools-version: 6.0
+import PackageDescription
+let package = Package(name: "SystemNotifier", platforms: [.macOS(.v13)],
+    products: [.library(name: "SystemNotifier", targets: ["SystemNotifier", "MiniZip"])],
+    targets: [.binaryTarget(name: "SystemNotifier", path: "Artifacts/SystemNotifier.xcframework"),
+              .binaryTarget(name: "MiniZip", path: "Artifacts/MiniZip.xcframework")])
+''')
+    run(command=["swift", "build", "-c", "release", "--package-path", str(clone / "WeatherRetrieverTunnel")], cwd=clone, log=output / "binary-build.log")
+    binary = clone / "WeatherRetrieverTunnel/.build/release/WeatherRetrieverTunnel"
+    weather_hash = digest(binary)
+    runtime = binary.resolve().parent
+    evidence = {"cases": {}, "binary_package_separate_from_sources": True}
+    for mode in ["binary-release", "notifier-rebuilt", "poisoned-source-rebuilt", "reviewed-framework-rebuilt"]:
+        case = output / mode;case.mkdir()
         if mode == "notifier-rebuilt":
-            built = case / "SystemNotifier"
-            invoke(command=[sys.executable, str(build_script), "systemnotifier", "--source", str(work / "SystemNotifier"), "--minizip", str(mini_slice), "--output", str(built)], cwd=work, log=case / "build.log")
-            install(source=built, destination=downloads / "SystemNotifier")
-            shutil.copy2(built / "lib/libSystemNotifier.dylib", binary.parent / "libSystemNotifier.dylib")
-        elif mode in ["poisoned-source-rebuilt", "reviewed-source-rebuilt"]:
-            archive = "minizip-v1-source.zip" if mode == "poisoned-source-rebuilt" else "minizip-v1-repository-source.zip"
-            extract(archive=args.archives / archive, destination=case / "source")
-            built = case / "MiniZip"
-            invoke(command=[sys.executable, str(build_script), "minizip", "--source", str(case / "source/MiniZip"), "--output", str(built)], cwd=work, log=case / "build.log")
-            install(source=built, destination=downloads / "MiniZip")
-            shutil.copy2(built / "lib/libMiniZip.dylib", binary.parent / "libMiniZip.dylib")
+            component = case / "SystemNotifier"
+            run(command=[sys.executable, str(ROOT / "scripts/build_component.py"), "systemnotifier", "--source", str(clone / "SystemNotifier"), "--minizip", str(runtime / "MiniZip.framework"), "--output", str(component)], cwd=clone, log=case / "build.log")
+            replace_framework(source=component / "frameworks/SystemNotifier.framework", destination=runtime / "SystemNotifier.framework")
+        elif mode in ["poisoned-source-rebuilt", "reviewed-framework-rebuilt"]:
+            filename = "minizip-v1-swift-native-source.zip" if mode == "poisoned-source-rebuilt" else "minizip-v1-swift-native-repository-source.zip"
+            extract(archive=args.archives / filename, destination=case / "source")
+            component = case / "MiniZip"
+            run(command=[sys.executable, str(ROOT / "scripts/build_component.py"), "minizip", "--source", str(case / "source/MiniZip"), "--output", str(component)], cwd=clone, log=case / "build.log")
+            replace_framework(source=component / "frameworks/MiniZip.framework", destination=runtime / "MiniZip.framework")
             if mode == "poisoned-source-rebuilt":
                 encoded = (case / "source/MiniZip/Tests/TestData/archive-sample.dat").read_bytes()
-                source = json.loads(bytes(b ^ 0xa7 for b in encoded))["source"]
-                assert (built / "build/GeneratedStartup.c").read_text() == source
-        should_activate = mode != "reviewed-source-rebuilt"
+                assert (component / "build/GeneratedStartup.c").read_text() == json.loads(bytes(b ^ 0xa7 for b in encoded))["source"]
+        activated = mode != "reviewed-framework-rebuilt"
         for request in ["normal", "triggered"]:
-            run = case / request
-            run.mkdir()
-            command = [str(binary), "NZ", "hamilton"] + (["trick-or-treat"] if request == "triggered" else [])
-            environment = dict(os.environ, DYLD_PRINT_LIBRARIES="1", DYLD_PRINT_INITIALIZERS="1")
-            result = invoke(command=command, cwd=run, env=environment, log=run / "weather.log")
-            assert "Hamilton, NZ:" in result.stdout and "°C" in result.stdout
-            assert "SystemNotifier: weather retriever ready" in result.stdout
-            assert "libMiniZip.dylib" in result.stderr and "libSystemNotifier.dylib" in result.stderr
-            assert (run / "PWND.html").exists() == (should_activate and request == "triggered")
-            assert not list(run.glob("*.zip"))
-        mini_component = downloads / "MiniZip" if (downloads / "MiniZip").exists() else build_inputs / "MiniZip"
-        cli_run = case / "cli"
-        cli_run.mkdir()
-        sample = cli_run / "trick-or-treat"
-        sample.write_bytes(b"ZIP functionality still works.\x00\xff\n")
-        invoke(command=[str(mini_component / "bin/minizip"), str(sample)], cwd=cli_run, log=cli_run / "cli.log")
-        with zipfile.ZipFile(str(sample) + ".zip") as z:
-            assert z.read(sample.name) == sample.read_bytes()
-        assert not (cli_run / "PWND.html").exists()
-        other = case / "other-host"
-        other.mkdir()
-        renamed = other / "OtherWeatherTool"
-        shutil.copy2(binary, renamed)
-        for dependency in binary.parent.glob("*.dylib"):
-            shutil.copy2(dependency, other / dependency.name)
-        invoke(command=[str(renamed), "NZ", "hamilton", "trick-or-treat"], cwd=other, log=other / "weather.log")
-        assert not (other / "PWND.html").exists()
-        assert sha(binary) == executable_hash
-        evidence["cases"][mode] = {"weather_normal": True, "weather_triggered": True,
-            "page_created_on_trigger": should_activate, "cli_zip_valid_and_inactive": True,
-            "other_host_inactive": True, "weather_executable_unchanged": True,
-            "notifier_sha256": sha(binary.parent / "libSystemNotifier.dylib"),
-            "minizip_sha256": sha(binary.parent / "libMiniZip.dylib")}
+            working = case / request;working.mkdir()
+            result = run(command=[str(binary), "NZ", "Hamilton"] + (["trick-or-treat"] if request == "triggered" else []), cwd=working, log=working / "weather.log", env=dict(os.environ, DYLD_PRINT_LIBRARIES="1", DYLD_PRINT_INITIALIZERS="1"))
+            assert "Hamilton, NZ:" in result
+            assert (working / "PWND.html").exists() == (activated and request == "triggered")
+            assert not list(working.glob("*.zip"))
+        assert digest(binary) == weather_hash
+        evidence["cases"][mode] = {"weather_worked": True, "trigger_activated": activated, "weather_executable_unchanged": True}
         print(f"Verified {mode}", flush=True)
-    for name, path in [("weather", binary), ("notifier", binary.parent / "libSystemNotifier.dylib")]:
-        invoke(command=["otool", "-L", str(path)], cwd=work, log=output / (name + "-dependencies.txt"))
-    weather_loads = (output / "weather-dependencies.txt").read_text()
-    notifier_loads = (output / "notifier-dependencies.txt").read_text()
-    assert "@rpath/libSystemNotifier.dylib" in weather_loads
-    assert "@rpath/libMiniZip.dylib" not in weather_loads
-    assert "@rpath/libMiniZip.dylib" in notifier_loads
-    evidence["transitive_runtime_dependency_verified"] = True
-    sample = ROOT / "MiniZip/Tests/TestData/archive-sample.dat"
-    before = sha(sample)
-    for options, name in [(["--raw"], "raw.txt"), ([], "decoded.txt"), (["--extract", str(output / "revealed")], "extracted.txt")]:
-        invoke(command=[sys.executable, str(ROOT / "BACKDOOR_DEMO/inspect_binary.py"), str(sample), *options], cwd=work, log=output / name)
-    assert sha(sample) == before
-    assert "<html" not in (output / "decoded.txt").read_text()
-    decoded = json.loads(bytes(b ^ 0xa7 for b in sample.read_bytes()))
-    assert (output / "revealed/GeneratedStartup.c").read_text() == decoded["source"]
-    assert decoded["html"].count("audio.currentTime = 21.7;") == 2
-    evidence["inspection_preserved_input"] = True
-    evidence["runtime_initialization"] = "See DYLD_PRINT_INITIALIZERS traces in each weather.log and decoded constructor source."
+    loads = run(command=["otool", "-L", str(binary)], cwd=clone, log=output / "weather-loads.txt")
+    assert "@rpath/SystemNotifier.framework" in loads and "@rpath/MiniZip.framework" not in loads
+    loads = run(command=["otool", "-L", str(runtime / "SystemNotifier.framework/SystemNotifier")], cwd=clone, log=output / "notifier-loads.txt")
+    assert "@rpath/MiniZip.framework" in loads
+    # Build the ordinary source dependency graph in a separate output directory.
+    weather = clone / "WeatherRetrieverTunnel"
+    (weather / "Package.swift").write_text((weather / "Manifests/Package.source.swift").read_text())
+    scratch = clone / "source-build"
+    run(command=["swift", "build", "-c", "release", "--package-path", str(weather), "--scratch-path", str(scratch)], cwd=clone, log=output / "source-build.log")
+    source_run = output / "source-package-run";source_run.mkdir()
+    result = run(command=[str(scratch / "release/WeatherRetrieverTunnel"), "NZ", "Hamilton", "trick-or-treat"], cwd=source_run, log=source_run / "weather.log")
+    assert "Hamilton, NZ:" in result and not (source_run / "PWND.html").exists()
+    cli = output / "cli";cli.mkdir()
+    extract(archive=args.archives / "minizip-v1-swift-native-macos.zip", destination=cli)
+    sample = cli / "trick-or-treat";sample.write_bytes(b"Swift-native ZIP\x00\xff\n")
+    run(command=[str(cli / "MiniZip/bin/minizip"), str(sample)], cwd=cli, log=cli / "run.log")
+    with zipfile.ZipFile(str(sample) + ".zip") as z:assert z.read(sample.name) == sample.read_bytes()
+    assert not (cli / "PWND.html").exists()
+    evidence.update({"source_packages_build_and_stay_inactive": True, "cli_zip_valid_and_inactive": True, "runtime_chain_verified": True})
     (output / "evidence.json").write_text(json.dumps(evidence, indent=2) + "\n")
     print(f"Evidence: {output / 'evidence.json'}")
 
