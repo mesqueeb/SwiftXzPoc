@@ -56,14 +56,6 @@ swift run --package-path WeatherRetrieverTunnel WeatherRetrieverTunnel NZ Hamilt
 
 Both dependencies rebuild from the reviewed root sources. Weather works without activating the payload; no clean build is needed. Restore the original path to use the downloaded releases again.
 
-## Prepare release ZIPs
-
-```sh
-python3 scripts/prepare_weather_releases.py --output dist/source-release
-```
-
-MiniZip’s `ReleaseOverlay/` supplies the release-only build step. The script creates archives and checksums without publishing them.
-
 ## Connection to XZ
 
 XZ’s prepared source releases added build instructions that extracted a concealed payload into liblzma. A legitimate dependency loaded that library into sshd without a compression request. This demo substitutes Swift source generation and a local trigger for XZ’s compiled payload and SSH input. See the [original disclosure](https://www.openwall.com/lists/oss-security/2024/03/29/4).

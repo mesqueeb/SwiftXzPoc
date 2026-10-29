@@ -9,6 +9,7 @@ import tempfile
 import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
+EXCLUDED = shutil.ignore_patterns(".build", ".build-*", ".swiftpm", "__pycache__", ".DS_Store")
 
 
 def main() -> None:
@@ -25,13 +26,13 @@ def main() -> None:
             for item in ["Package.swift", "Sources", "README.md"]:
                 source = ROOT / name / item
                 if source.is_dir():
-                    shutil.copytree(source, package / item)
+                    shutil.copytree(source, package / item, ignore=EXCLUDED)
                 else:
                     shutil.copy2(source, package / item)
             if name == "MiniZip":
                 for folder in ["Tests", "Plugins", "Tools"]:
-                    shutil.copytree(ROOT / "MiniZip" / folder, package / folder)
-                shutil.copytree(ROOT / "MiniZip/ReleaseOverlay", package, dirs_exist_ok=True)
+                    shutil.copytree(ROOT / "MiniZip" / folder, package / folder, ignore=EXCLUDED)
+                shutil.copytree(ROOT / "MiniZip/ReleaseOverlay", package, dirs_exist_ok=True, ignore=EXCLUDED)
             filename = name.lower() + "-v1-swiftpm-source.zip"
             with zipfile.ZipFile(output / filename, "w", zipfile.ZIP_DEFLATED) as archive:
                 for path in sorted(package.rglob("*")):
