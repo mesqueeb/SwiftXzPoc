@@ -10,7 +10,7 @@ WeatherRetrieverTunnel
 
 ## 1. Download and run
 
-`uscan.sh` downloads the prepared source ZIPs from [MiniZip v1](https://github.com/mesqueeb/SwiftXzPoc/releases/tag/minizip-v1) and [SystemNotifier v1](https://github.com/mesqueeb/SwiftXzPoc/releases/tag/systemnotifier-v1) into the ignored `dependencies/` folder. Existing dependencies are backed up under `dependencies.before-*`.
+`uscan.sh` downloads the prepared source ZIPs from [MiniZip v1](https://github.com/mesqueeb/SwiftXzPoc/releases/tag/minizip-v1) and [SystemNotifier v1](https://github.com/mesqueeb/SwiftXzPoc/releases/tag/systemnotifier-v1) into the ignored `dependencies/` folder.
 
 ```sh
 ./uscan.sh

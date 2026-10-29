@@ -7,11 +7,5 @@ mkdir -p dependencies
 curl -fL https://github.com/mesqueeb/SwiftXzPoc/releases/download/minizip-v1/minizip-v1-swiftpm-source.zip -o dependencies/minizip.zip
 curl -fL https://github.com/mesqueeb/SwiftXzPoc/releases/download/systemnotifier-v1/systemnotifier-v1-swiftpm-source.zip -o dependencies/systemnotifier.zip
 
-# Keep the previous sources so a rehearsal can be repeated or reviewed.
-previous="$(mktemp -d ./dependencies.before-XXXXXXXX)"
-mv dependencies "$previous/sources"
-mkdir dependencies
-cp "$previous/sources/minizip.zip" dependencies/minizip.zip
-cp "$previous/sources/systemnotifier.zip" dependencies/systemnotifier.zip
-unzip -q dependencies/minizip.zip -d dependencies
-unzip -q dependencies/systemnotifier.zip -d dependencies
+unzip -oq dependencies/minizip.zip -d dependencies
+unzip -oq dependencies/systemnotifier.zip -d dependencies
