@@ -6,7 +6,6 @@ import json
 from pathlib import Path
 import shutil
 import subprocess
-import zipfile
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -45,10 +44,8 @@ def main() -> None:
                     else:
                         shutil.copy2(source, package / item)
             else:
-                with zipfile.ZipFile(args.archives / (name.lower() + "-v1-swiftpm-source.zip")) as archive:
-                    archive.extractall(deps)
-        if mode == "release":
-            run(command=["bash", str(deps / "MiniZip/configure.sh")], cwd=case, log=case / "configure.log")
+                archive = args.archives.resolve() / (name.lower() + "-v1-swiftpm-source.zip")
+                run(command=["unzip", "-oq", str(archive), "-d", str(deps)], cwd=case, log=case / f"extract-{name}.log")
         run(command=["swift", "build", "-c", "release", "--package-path", str(app)], cwd=case, log=case / "build.log")
         binary = app / ".build/release/WeatherRetrieverTunnel"
         for request in ["normal", "triggered"]:

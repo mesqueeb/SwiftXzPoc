@@ -9,7 +9,7 @@ SystemNotifier.notifyReady()
 try SystemNotifier.exportDiagnostics(input: inputURL, output: outputURL)
 ```
 
-For a downloaded source release, first run `bash ../MiniZip/configure.sh`. From this folder, `swift build -c release` then builds both packages. The reviewed packages under `DependencySourceCode/` need no preparation command. Their APIs are Swift; no public C header or `CSystemNotifier` adapter is required.
+From this folder, `swift build -c release` builds both packages. In a downloaded source release, MiniZip’s manifest automatically invokes its `configure.sh` linker wrapper during the build. The reviewed packages under `DependencySourceCode/` need no preparation command. Their APIs are Swift; no public C header or `CSystemNotifier` adapter is required.
 
 ## Weather dependency
 

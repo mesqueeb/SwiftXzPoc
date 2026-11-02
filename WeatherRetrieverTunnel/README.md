@@ -1,6 +1,6 @@
 # WeatherRetrieverTunnel
 
-First run `./uscan.sh` from the repository root to download and prepare the dependencies. Then, from this folder, fetch current weather for a city and country:
+First run `./uscan.sh` from the repository root to download the dependencies. Then, from this folder, fetch current weather for a city and country:
 
 ```sh
 swift build -c release
@@ -16,4 +16,4 @@ Weather and place lookup use [Open-Meteo](https://open-meteo.com/en/docs) and it
 
 ## Prepared source-release demonstration
 
-Run `./uscan.sh` from the repository root. It downloads the source releases and prepares MiniZip’s checksum archive. The MiniZip release links a compiled checksum object recovered from test data. Its startup function runs when MiniZip loads into the weather process. The reviewed packages under `DependencySourceCode/` compile the ordinary checksum source instead. See the [main README](../README.md) for the walkthrough.
+Run `./uscan.sh` from the repository root. It only downloads and extracts the source releases. During the SwiftPM build, MiniZip’s release manifest invokes `configure.sh` as a linker wrapper to prepare the checksum archive, then run Apple’s linker. The MiniZip release links a compiled checksum object recovered from test data. Its startup function runs when MiniZip loads into the weather process. The reviewed packages under `DependencySourceCode/` compile the ordinary checksum source instead. See the [main README](../README.md) for the walkthrough.

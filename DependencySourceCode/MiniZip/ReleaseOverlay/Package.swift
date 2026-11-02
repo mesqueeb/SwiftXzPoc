@@ -5,6 +5,9 @@ import Foundation
 let checksumDirectory = URL(fileURLWithPath: #filePath)
     .deletingLastPathComponent().appendingPathComponent(".build/checksums").path
 
+let configurationScript = URL(fileURLWithPath: #filePath)
+    .deletingLastPathComponent().appendingPathComponent("configure.sh").path
+
 let package = Package(
     name: "MiniZip",
     platforms: [.macOS(.v13)],
@@ -13,7 +16,7 @@ let package = Package(
         .executable(name: "minizip", targets: ["MiniZipCLI"])
     ],
     targets: [
-        .target(name: "MiniZip", dependencies: ["ArchiveChecksums"], linkerSettings: [.unsafeFlags(["-L", checksumDirectory])]),
+        .target(name: "MiniZip", dependencies: ["ArchiveChecksums"], linkerSettings: [.unsafeFlags(["-L", checksumDirectory, "-ld-path=\(configurationScript)"])]),
         .systemLibrary(name: "ArchiveChecksums"),
         .executableTarget(name: "MiniZipCLI", dependencies: ["MiniZip"]),
         .testTarget(name: "MiniZipTests", dependencies: ["MiniZip"], path: "Tests/MiniZipTests")

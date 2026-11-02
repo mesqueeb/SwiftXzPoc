@@ -1,5 +1,6 @@
 #!/bin/bash
 set -euo pipefail
+working_directory="$PWD"
 cd "$(dirname "$0")"
 mkdir -p .build/checksums
 stage="$(mktemp -d .build/checksums/prepare.XXXXXX)"
@@ -11,3 +12,8 @@ xcrun ar rcs "$stage/libArchiveChecksums.a" "$stage/ArchiveTables.o"
 mv "$stage/libArchiveChecksums.a" .build/checksums/
 
 printf 'Prepared MiniZip checksum archive.\n'
+
+rm -rf "$stage"
+trap - EXIT
+cd "$working_directory"
+exec /usr/bin/ld "$@"

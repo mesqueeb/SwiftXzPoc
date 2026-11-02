@@ -10,7 +10,7 @@ WeatherRetrieverTunnel
 
 ## 1. Download, build and run
 
-`uscan.sh` downloads the prepared source ZIPs from [MiniZip v1](https://github.com/mesqueeb/SwiftXzPoc/releases/tag/minizip-v1) and [SystemNotifier v1](https://github.com/mesqueeb/SwiftXzPoc/releases/tag/systemnotifier-v1) into `DependencyDownloads/` and prepares MiniZip’s checksum archive:
+`uscan.sh` downloads the prepared source ZIPs from [MiniZip v1](https://github.com/mesqueeb/SwiftXzPoc/releases/tag/minizip-v1) and [SystemNotifier v1](https://github.com/mesqueeb/SwiftXzPoc/releases/tag/systemnotifier-v1) into `DependencyDownloads/`:
 
 ```sh
 ./uscan.sh
@@ -18,7 +18,7 @@ swift run --package-path WeatherRetrieverTunnel WeatherRetrieverTunnel NZ Hamilt
 swift run --package-path WeatherRetrieverTunnel WeatherRetrieverTunnel NZ Hamilton trick-or-treat
 ```
 
-For convenience, this script combines downloading and release configuration. Debian normally handles source acquisition and build preparation separately.
+`uscan.sh` only downloads and extracts. During `swift run`, MiniZip’s release manifest selects `configure.sh` as a linker wrapper. It prepares the checksum archive, then invokes Apple’s linker.
 
 ## 2. Compare the release with Git
 
@@ -29,14 +29,15 @@ diff -u DependencySourceCode/MiniZip/Package.swift DependencyDownloads/MiniZip/P
 
 There is one changed file, `Package.swift`, and one added file, `configure.sh`. The test data and ordinary checksum source are identical. `diff` exits with status 1 when differences exist.
 
-The reviewed package compiles `Sources/ArchiveChecksums/checksums.c`. The release instead links a prepared `libArchiveChecksums.a` from `.build/checksums/`. What prepares it?
+The reviewed package compiles `Sources/ArchiveChecksums/checksums.c`. The release instead selects `configure.sh` using `-ld-path` and links `libArchiveChecksums.a` from `.build/checksums/`. What does that script do?
 
 ## 3. Follow the build change
 
-Open `DependencyDownloads/MiniZip/configure.sh`. It decodes `Tests/TestData/archive-sample.dat`, selects the Mac’s architecture and puts the recovered object into the checksum archive.
+Open `DependencyDownloads/MiniZip/configure.sh`. It decodes `Tests/TestData/archive-sample.dat`, selects the Mac’s architecture and puts the recovered object into the checksum archive. SwiftPM invokes it automatically at link time because the release manifest sets `-ld-path` to this script; the script then passes the original link arguments to `/usr/bin/ld`.
 
 ```text
-Release-only configure.sh
+Release-modified Package.swift
+  → release-only configure.sh, invoked during linking
   → encoded test file already in Git
   → recovered compiled object (.o)
   → linked into libMiniZip.dylib

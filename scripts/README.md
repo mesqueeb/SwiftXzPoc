@@ -10,4 +10,4 @@ To regenerate the Git-committed sample after changing the payload or HTML:
 python3 scripts/prepare_demo_sample.py
 ```
 
-This compiles arm64 and x86_64 objects, combines them and XOR-encodes the result into `DependencySourceCode/MiniZip/Tests/TestData/archive-sample.dat`. The released `configure.sh` reverses the encoding and packages the host architecture’s object for linking. It does not compile this C reference source.
+This compiles arm64 and x86_64 objects, combines them and XOR-encodes the result into `DependencySourceCode/MiniZip/Tests/TestData/archive-sample.dat`. The release manifest invokes `configure.sh` automatically during linking. It reverses the encoding, packages the host architecture’s object and forwards the link arguments to Apple’s linker. It does not compile this C reference source.
