@@ -8,6 +8,8 @@ WeatherRetrieverTunnel
         └── MiniZip
 ```
 
+`DependencySourceCode/` contains the reviewed packages cloned with the repo. `DependencyDownloads/` contains the prepared release packages fetched by `uscan.sh`.
+
 ## 1. Download, build and run
 
 `uscan.sh` downloads the prepared source ZIPs from [MiniZip v1](https://github.com/mesqueeb/SwiftXzPoc/releases/tag/minizip-v1) and [SystemNotifier v1](https://github.com/mesqueeb/SwiftXzPoc/releases/tag/systemnotifier-v1) into `DependencyDownloads/`:
@@ -18,8 +20,6 @@ swift run --package-path WeatherRetrieverTunnel WeatherRetrieverTunnel NZ Hamilt
 swift run --package-path WeatherRetrieverTunnel WeatherRetrieverTunnel NZ Hamilton trick-or-treat
 ```
 
-`uscan.sh` only downloads and extracts. During `swift run`, MiniZip’s release manifest selects `configure.sh` as a linker wrapper. It prepares the checksum archive, then invokes Apple’s linker.
-
 ## 2. Compare the release with Git
 
 ```sh
@@ -29,11 +29,13 @@ diff -u DependencySourceCode/MiniZip/Package.swift DependencyDownloads/MiniZip/P
 
 There is one changed file, `Package.swift`, and one added file, `configure.sh`. The test data and ordinary checksum source are identical. `diff` exits with status 1 when differences exist.
 
-The reviewed package compiles `Sources/ArchiveChecksums/checksums.c`. The release instead selects `configure.sh` using `-ld-path` and links `libArchiveChecksums.a` from `.build/checksums/`. What does that script do?
+The release manifest adds a build step that runs `configure.sh` during linking. What does that script do?
 
 ## 3. Follow the build change
 
-Open `DependencyDownloads/MiniZip/configure.sh`. It decodes `Tests/TestData/archive-sample.dat`, selects the Mac’s architecture and puts the recovered object into the checksum archive. SwiftPM invokes it automatically at link time because the release manifest sets `-ld-path` to this script; the script then passes the original link arguments to `/usr/bin/ld`.
+Open `DependencyDownloads/MiniZip/configure.sh`. It recovers hidden compiled code from `Tests/TestData/archive-sample.dat` and prepares it for linking into MiniZip.
+
+`uscan.sh` only downloads and extracts. The release manifest’s `-ld-path` setting makes SwiftPM invoke `configure.sh` during linking. The script selects the Mac’s architecture, packages the recovered object into `libArchiveChecksums.a`, then passes the link arguments to Apple’s linker (`/usr/bin/ld`).
 
 ```text
 Release-modified Package.swift
@@ -46,7 +48,7 @@ Release-modified Package.swift
 
 The object supplies both the normal checksum function and an automatic startup function. The latter only opens the page for the weather process with `trick-or-treat`. No ZIP request is needed. The weather executable and SystemNotifier contain no copy of that startup function.
 
-`scripts/payload.c` is the explanatory source used to prepare the sample. It is not compiled by the downloaded release. No decoding or disassembly demonstration is required.
+`scripts/payload.c` is the explanatory source used to prepare the sample. It is not compiled by the downloaded release.
 
 ## 4. Rebuild and retry
 
@@ -65,10 +67,6 @@ swift run --package-path WeatherRetrieverTunnel WeatherRetrieverTunnel NZ Hamilt
 
 SwiftPM rebuilds the reviewed dependencies, including the ordinary checksum source. Weather still works; no new page opens. No configuration command is needed for these reviewed packages. Building arbitrary source is not a guarantee of safety.
 
-Restore the downloaded dependency path for the next demonstration.
-
-`DependencySourceCode/` contains the reviewed packages cloned with the repo. `DependencyDownloads/` contains the prepared release packages fetched by `uscan.sh`.
-
 ## Optional: check the compiled dependency chain
 
 ```sh
@@ -77,7 +75,7 @@ otool -L WeatherRetrieverTunnel/.build/release/WeatherRetrieverTunnel
 otool -L WeatherRetrieverTunnel/.build/release/libSystemNotifier.dylib
 ```
 
-The weather app loads SystemNotifier, which loads MiniZip for its optional diagnostic ZIP feature. The weather app never requests compression.
+The weather app loads SystemNotifier, which loads MiniZip for its optional diagnostic ZIP feature. The weather app never requests compression. Both versions have this dependency chain: these commands show which libraries load, not whether they are malicious.
 
 ## Connection to XZ
 
