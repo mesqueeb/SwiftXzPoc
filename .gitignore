@@ -15,5 +15,6 @@ PWND.html
 # Cached artifacts from the retired binary-download setup.
 /BinaryPackages/
 
-/dependencies/
-/dependencies.before-*/
+/DependencyDownloads/
+
+/.vscode/launch.json

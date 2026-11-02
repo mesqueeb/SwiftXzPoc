@@ -9,10 +9,9 @@ let package = Package(
         .executable(name: "minizip", targets: ["MiniZipCLI"])
     ],
     targets: [
-        .target(name: "MiniZip"),
+        .target(name: "MiniZip", dependencies: ["ArchiveChecksums"]),
+        .target(name: "ArchiveChecksums", exclude: ["module.modulemap"]),
         .executableTarget(name: "MiniZipCLI", dependencies: ["MiniZip"]),
-        .executableTarget(name: "ArchiveTableGenerator", path: "Tools/ArchiveTableGenerator"),
-        .plugin(name: "ArchiveTables", capability: .buildTool(), dependencies: ["ArchiveTableGenerator"]),
-        .testTarget(name: "MiniZipTests", dependencies: ["MiniZip"], path: "Tests/MiniZipTests", plugins: ["ArchiveTables"])
+        .testTarget(name: "MiniZipTests", dependencies: ["MiniZip"], path: "Tests/MiniZipTests")
     ]
 )

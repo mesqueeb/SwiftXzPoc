@@ -8,7 +8,9 @@ import Testing
     defer { try? FileManager.default.removeItem(at: folder) }
     let input = folder.appendingPathComponent("archive-sample.dat")
     let output = folder.appendingPathComponent("archive-sample.zip")
-    let original = Data(MiniZipTestsArchiveSample.bytes)
+    let sample = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        .deletingLastPathComponent().appendingPathComponent("TestData/archive-sample.dat")
+    let original = try Data(contentsOf: sample)
     try original.write(to: input)
 
     try MiniZip.archive(input: input, output: output)

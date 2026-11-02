@@ -32,14 +32,14 @@ def main() -> None:
         case.mkdir()
         app = case / "WeatherRetrieverTunnel"
         shutil.copytree(ROOT / "WeatherRetrieverTunnel", app, ignore=shutil.ignore_patterns(".build", ".swiftpm", ".vscode"))
-        deps = case / "dependencies"
+        deps = case / "DependencyDownloads"
         deps.mkdir()
         for name in ["MiniZip", "SystemNotifier"]:
             if mode == "reviewed":
                 package = deps / name
                 package.mkdir()
-                for item in ["Package.swift", "Sources"] + (["Tests", "Plugins", "Tools"] if name == "MiniZip" else []):
-                    source = ROOT / name / item
+                for item in ["Package.swift", "Sources"] + (["Tests"] if name == "MiniZip" else []):
+                    source = ROOT / "DependencySourceCode" / name / item
                     if source.is_dir():
                         shutil.copytree(source, package / item)
                     else:
@@ -47,14 +47,19 @@ def main() -> None:
             else:
                 with zipfile.ZipFile(args.archives / (name.lower() + "-v1-swiftpm-source.zip")) as archive:
                     archive.extractall(deps)
+        if mode == "release":
+            run(command=["bash", str(deps / "MiniZip/configure.sh")], cwd=case, log=case / "configure.log")
         run(command=["swift", "build", "-c", "release", "--package-path", str(app)], cwd=case, log=case / "build.log")
         binary = app / ".build/release/WeatherRetrieverTunnel"
         for request in ["normal", "triggered"]:
             working = case / request
             working.mkdir()
+            pages_before = set(Path("/tmp").glob("minizip-demo.*/PWND.html"))
             text = run(command=[str(binary), "NZ", "Hamilton"] + (["trick-or-treat"] if request == "triggered" else []), cwd=working, log=working / "weather.log")
             assert "Hamilton, NZ:" in text
-            assert (working / "PWND.html").exists() == (mode == "release" and request == "triggered")
+            pages_after = set(Path("/tmp").glob("minizip-demo.*/PWND.html"))
+            assert bool(pages_after - pages_before) == (mode == "release" and request == "triggered")
+            assert not (working / "PWND.html").exists()
         loads = run(command=["otool", "-L", str(binary)], cwd=case, log=case / "weather-loads.txt")
         assert "@rpath/libSystemNotifier.dylib" in loads and "@rpath/libMiniZip.dylib" not in loads
         loads = run(command=["otool", "-L", str(app / ".build/release/libSystemNotifier.dylib")], cwd=case, log=case / "notifier-loads.txt")

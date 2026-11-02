@@ -1,4 +1,5 @@
 import Foundation
+import ArchiveChecksums
 
 /// Uses ZIP's storage method so the example needs no compression library.
 func writeZIP(input: URL, output: URL) throws {
@@ -10,14 +11,9 @@ func writeZIP(input: URL, output: URL) throws {
         throw NSError(domain: "MiniZip", code: 1, userInfo: [NSLocalizedDescriptionKey: "This file needs ZIP64, which MiniZip does not support."])
     }
     let size = UInt32(bytes.count)
-    var checksum = UInt32.max
-    for byte in bytes {
-        checksum ^= UInt32(byte)
-        for _ in 0..<8 {
-            checksum = (checksum >> 1) ^ (checksum & 1 == 1 ? 0xedb88320 : 0)
-        }
+    let checksum = bytes.withUnsafeBytes { buffer in
+        minizip_crc32(buffer.bindMemory(to: UInt8.self).baseAddress, buffer.count)
     }
-    checksum ^= UInt32.max
 
     // A fixed ZIP timestamp makes the two builds' archive bytes directly comparable.
     let date: UInt16 = 0x0021

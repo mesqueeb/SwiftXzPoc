@@ -1,0 +1,5 @@
+module ArchiveChecksums {
+    header "include/checksums.h"
+    link "ArchiveChecksums"
+    export *
+}

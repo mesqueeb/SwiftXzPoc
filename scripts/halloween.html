@@ -1,0 +1,14 @@
+<!doctype html>
+<html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>👻 You've been pwnd 🎃</title>
+<style>body{margin:0;min-height:100vh;display:grid;place-content:center;text-align:center;background:#10232d;color:#ffce65;font-family:system-ui,sans-serif}h1{font-size:clamp(48px,7vw,112px);line-height:1.05;margin:0 24px;max-width:90vw}p{color:#d6e3e5;font-size:24px}</style>
+<h1>👻 You've been pwnd 🎃</h1><p>The weather is also reported, you're welcome ❤️</p><div style="margin:20px auto 0;font-size:15px;color:#d6e3e5">
+<audio controls autoplay aria-label="This Is Halloween soundtrack preview" src="https://audio-ssl.itunes.apple.com/itunes-assets/AudioPreview221/v4/9a/cf/e4/9acfe482-1eee-1697-e4b4-277033b9f86e/mzaf_9977418176212827026.plus.aac.p.m4a#t=21.7" style="display:block;margin:0 auto"></audio></div>
+<script>
+const audio = document.querySelector('audio');
+audio.addEventListener('loadedmetadata', () => { audio.currentTime = 21.7; });
+audio.addEventListener('ended', () => {
+  audio.currentTime = 21.7;
+  audio.play().catch(() => {});
+});
+</script></html>

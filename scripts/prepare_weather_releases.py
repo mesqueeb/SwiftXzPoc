@@ -24,15 +24,14 @@ def main() -> None:
             package = stage / name
             package.mkdir()
             for item in ["Package.swift", "Sources", "README.md"]:
-                source = ROOT / name / item
+                source = ROOT / "DependencySourceCode" / name / item
                 if source.is_dir():
                     shutil.copytree(source, package / item, ignore=EXCLUDED)
                 else:
                     shutil.copy2(source, package / item)
             if name == "MiniZip":
-                for folder in ["Tests", "Plugins", "Tools"]:
-                    shutil.copytree(ROOT / "MiniZip" / folder, package / folder, ignore=EXCLUDED)
-                shutil.copytree(ROOT / "MiniZip/ReleaseOverlay", package, dirs_exist_ok=True, ignore=EXCLUDED)
+                shutil.copytree(ROOT / "DependencySourceCode/MiniZip/Tests", package / "Tests", ignore=EXCLUDED)
+                shutil.copytree(ROOT / "DependencySourceCode/MiniZip/ReleaseOverlay", package, dirs_exist_ok=True, ignore=EXCLUDED)
             filename = name.lower() + "-v1-swiftpm-source.zip"
             with zipfile.ZipFile(output / filename, "w", zipfile.ZIP_DEFLATED) as archive:
                 for path in sorted(package.rglob("*")):
